@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Notice, Page } from '@/components/ui'
 import FlightSearch from '@/components/FlightSearch'
+import WeekComparison from '@/components/WeekComparison'
 import { listAttendees, listVotes } from '@/lib/attendees'
 import { cheapestFrom, isFaresConfigured, type Fare } from '@/lib/fares'
 import { AIRPORTS, TRIP } from '@/lib/config'
@@ -51,6 +52,30 @@ export default async function FlightsPage() {
           .filter((a) => a.origin_airport)
           .map((a) => ({ name: a.nickname || a.name, airport: a.origin_airport!.toUpperCase() }))}
       />
+
+      {/* The decision the group is actually making: which week, not which
+          airline. Comparing weeks across every origin at once is the only view
+          that answers it. */}
+      <section className="mt-14">
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+          <h2 className="display text-2xl">Which week to pick</h2>
+          <p className="marker">Nobody books until we agree</p>
+        </div>
+        <p className="text-slate2 mb-5 max-w-2xl">
+          Conditions, the vote and what the flights cost the whole crew, week by week. The cheapest
+          week for one person is often not the cheapest week for twelve.
+        </p>
+        {origins.length === 0 ? (
+          <Notice title="No home airports on file yet">
+            <p>
+              This table fills in as people add their airport. Two or three is enough for it to
+              start being useful.
+            </p>
+          </Notice>
+        ) : (
+          <WeekComparison origins={origins} votes={votes} crewSize={attendees.filter((a) => a.status !== 'out').length} />
+        )}
+      </section>
 
       {/* Close the loop: a flight nobody records is a flight the budget and the
           arrivals board cannot see. */}

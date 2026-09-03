@@ -6,6 +6,7 @@ import { FOIL_LEVELS, GEAR_ITEMS, PASSPORT_MONTHS_REQUIRED, TRIP } from '@/lib/c
 import type { Attendee, DateVote, Window } from '@/lib/attendees'
 import { PROPOSED_WEEKS, type Vote, type ProposedWeek } from '@/lib/weeks'
 import FlightLinks from './FlightLinks'
+import JourneyPanel, { useJourney } from './JourneyPanel'
 
 type Draft = Record<string, string | boolean | string[]>
 
@@ -148,6 +149,7 @@ export default function AttendeeForm({
     PROPOSED_WEEKS[0]
 
   const originReady = /^[A-Z]{3}$/.test((draft.origin_airport as string) ?? '')
+  const journey = useJourney((draft.origin_airport as string) ?? '')
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -357,9 +359,16 @@ export default function AttendeeForm({
             onChange={(e) => set('origin_airport', e.target.value.toUpperCase())}
           />
         </Field>
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-2 space-y-4">
           {originReady ? (
-            <FlightLinks origin={draft.origin_airport as string} week={searchWeek} compact />
+            <>
+              {(journey.data || journey.loading || journey.error) && (
+                <div className="border border-hairline p-4">
+                  <JourneyPanel {...journey} highlightWeek={searchWeek.key} />
+                </div>
+              )}
+              <FlightLinks origin={draft.origin_airport as string} week={searchWeek} compact />
+            </>
           ) : (
             <p className="text-sm text-slate2 border border-dashed border-hairline p-4">
               Put your home airport in above and the flight search appears here, dates already

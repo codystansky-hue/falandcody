@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import FlightLinks from './FlightLinks'
+import JourneyPanel, { useJourney } from './JourneyPanel'
 import type { ProposedWeek } from '@/lib/weeks'
 
 const KEY = 'chicama_origin'
@@ -46,6 +47,7 @@ export default function FlightSearch({
 
   const week = weeks.find((w) => w.key === weekKey) ?? weeks[0]
   const ready = /^[A-Z]{3}$/.test(origin)
+  const journey = useJourney(origin)
 
   return (
     <div className="card p-5 md:p-6">
@@ -113,6 +115,11 @@ export default function FlightSearch({
         </p>
       ) : (
         <div className="mt-6">
+          {(journey.data || journey.loading || journey.error) && (
+            <div className="border-t border-hairline pt-5 mb-2">
+              <JourneyPanel {...journey} highlightWeek={weekKey} />
+            </div>
+          )}
           <FlightLinks origin={origin} week={week} />
           <p className="text-xs text-slate2 border-t border-hairline pt-4 mt-5">
             Book the return for {week.end} or later — the hotel shuttle back to Trujillo takes an

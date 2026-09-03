@@ -5,6 +5,7 @@ import { compass, getForecast, metresToFeet } from '@/lib/swell'
 import { CLIMATE_SOURCE, SEASON, WINDOW_BLOCKS, wetsuitFor } from '@/lib/season'
 import { PROPOSED_WEEKS, tallyWeeks, VOTES, weekByKey } from '@/lib/weeks'
 import { routeOptions } from '@/lib/flightSearch'
+import { hoursLabel, journeyFor } from '@/lib/journey'
 import { isDbReady } from '@/lib/db'
 import { DEFAULTS, IGV_RATE, costFor, usd } from '@/lib/costs'
 import { HOTEL } from '@/lib/hotel'
@@ -324,10 +325,23 @@ async function callTool(name: string, args: Json) {
         week = ranked[0] ?? PROPOSED_WEEKS[0]
       }
       const routes = routeOptions(origin, week.start, week.end)
+      const j = journeyFor(origin)
       return text({
         week: week.label,
         depart: week.start,
         return: week.end,
+        journey: j
+          ? {
+              from: `${j.origin.iata} — ${j.origin.name}, ${j.origin.city} (${j.origin.country})`,
+              distance_to_lima_km: j.lima.km,
+              nonstop_to_lima: j.lima.nonstop,
+              stops: j.stops,
+              airborne: hoursLabel(j.lima.airborneHours + j.hop.airborneHours),
+              door_to_door: hoursLabel(j.totalHours),
+              breakdown:
+                'International leg, a Lima connection (2.5 h for immigration and a domestic recheck), the ~1 h hop to Trujillo, then 1.5 h by road up the coast.',
+            }
+          : null,
         routes,
         advice:
           'The through-booking to TRU is simplest because the airline owns the connection. Splitting at Lima is often cheaper but the missed-connection risk becomes yours.',
