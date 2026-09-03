@@ -1,6 +1,5 @@
 import { PROPOSED_WEEKS, tallyWeeks } from '@/lib/weeks'
-import { cheapestFrom, isFaresConfigured } from '@/lib/fares'
-import { AIRPORTS } from '@/lib/config'
+import { cachedFare } from '@/lib/fares-cache'
 import type { DateVote } from '@/lib/attendees'
 
 /**
@@ -22,38 +21,36 @@ export default async function WeekComparison({
   crewSize: number
 }) {
   const ranked = tallyWeeks(votes)
-  const configured = isFaresConfigured()
 
-  const priced = configured
-    ? await Promise.all(
-        PROPOSED_WEEKS.map(async (week) => {
-          const perOrigin = await Promise.all(
-            origins.map(async (origin) => {
-              const fares = await cheapestFrom(origin, {
-                departureMonth: week.start.slice(0, 7),
-                destination: AIRPORTS.gateway.iata,
-              })
-              const cheapest = fares?.length
-                ? fares.reduce((a, b) => (b.priceUsd < a.priceUsd ? b : a)).priceUsd
-                : null
-              return { origin, usd: cheapest }
-            }),
-          )
-          const known = perOrigin.filter((p) => p.usd != null)
-          return {
-            key: week.key,
-            perOrigin,
-            groupTotal: known.length ? known.reduce((sum, p) => sum + (p.usd ?? 0), 0) : null,
-            covered: known.length,
-          }
-        }),
+  // Cache only. This table would otherwise fire origins × weeks requests on
+  // every page view; the cache is warmed as each person looks up their own
+  // route on /flights or in the form.
+  const priced = await Promise.all(
+    PROPOSED_WEEKS.map(async (week) => {
+      const perOrigin = await Promise.all(
+        origins.map(async (origin) => ({
+          origin,
+          fare: await cachedFare(origin, week.start),
+        })),
       )
-    : null
+      const known = perOrigin.filter((p) => p.fare)
+      return {
+        key: week.key,
+        perOrigin,
+        groupTotal: known.length ? known.reduce((sum, p) => sum + (p.fare?.usd ?? 0), 0) : null,
+        covered: known.length,
+        anyStale: known.some((p) => p.fare?.stale),
+      }
+    }),
+  )
 
-  const totals = priced?.map((p) => p.groupTotal).filter((t): t is number => t != null) ?? []
+  const totals = priced.map((p) => p.groupTotal).filter((t): t is number => t != null)
   const cheapestTotal = totals.length ? Math.min(...totals) : null
+  const missing = origins.length * PROPOSED_WEEKS.length -
+    priced.reduce((n, p) => n + p.covered, 0)
 
   return (
+    <div>
     <div className="overflow-x-auto card">
       <table className="w-full text-sm border-collapse min-w-[46rem]">
         <thead>
@@ -100,12 +97,12 @@ export default async function WeekComparison({
                   const cell = row?.perOrigin.find((p) => p.origin === origin)
                   return (
                     <td key={origin} className="px-4 py-3 mono">
-                      {!configured ? (
+                      {!cell?.fare ? (
                         <span className="text-slate2">—</span>
-                      ) : cell?.usd == null ? (
-                        <span className="text-slate2">n/a</span>
                       ) : (
-                        `$${cell.usd.toFixed(0)}`
+                        <span className={cell.fare.stale ? 'text-slate2' : undefined}>
+                          ${cell.fare.usd.toFixed(0)}
+                        </span>
                       )}
                     </td>
                   )
@@ -125,6 +122,20 @@ export default async function WeekComparison({
           })}
         </tbody>
       </table>
+    </div>
+      {missing > 0 && (
+        <p className="text-xs text-slate2 mt-3">
+          {missing} of {origins.length * PROPOSED_WEEKS.length} prices not looked up yet. They fill
+          in as each person checks their own route — the lookup on their page caches the result for
+          everyone. Greyed prices are more than six hours old.
+        </p>
+      )}
+      {missing === 0 && (
+        <p className="text-xs text-slate2 mt-3">
+          Cheapest round trip to Lima per person, from Google Flights. Greyed prices are more than
+          six hours old. Indicative — confirm on the airline before booking.
+        </p>
+      )}
     </div>
   )
 }

@@ -163,20 +163,19 @@ export default function JourneyPanel({
               ))}
             </ul>
             <p className="text-xs text-slate2 mt-2">
-              Indicative cached fares to Lima, not live availability. Use the search buttons for
-              what is actually bookable today.
+              Cheapest round trip to Lima, live from Google Flights. Indicative — click through to
+              confirm what is actually bookable.
             </p>
           </div>
         ) : (
           <p className="text-xs text-slate2">
-            No cached fares for this route — it only holds what people have recently searched. The
-            search buttons still work.
+            No price came back for this route just now. The search buttons still work, and reloading
+            usually fixes it.
           </p>
         )
       ) : (
         <p className="text-xs text-slate2">
-          Prices per week are not switched on yet. Distances and timings above are computed, not
-          estimated.
+          No price came back this time — the source is intermittent. Reload and it usually appears.
         </p>
       )}
     </div>
