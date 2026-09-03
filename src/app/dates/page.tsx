@@ -25,8 +25,10 @@ function weeksIn(startISO: string, endISO: string) {
   return weeks
 }
 
-// April and September are the two months that almost never miss at Chicama.
-const PRIME_MONTHS = [3, 8]
+// October and November carry the window's best conditions — see src/lib/season.ts.
+// October has the highest share of standout days in the record; November is the
+// driest and quietest. Zero-indexed to match getUTCMonth().
+const PRIME_MONTHS = [9, 10]
 
 export default async function DatesPage() {
   const [attendees, windows] = await Promise.all([listAttendees(), listWindows()])
@@ -56,7 +58,7 @@ export default async function DatesPage() {
     <Page
       marker={`Window · ${TRIP.window.label}`}
       title="Dates"
-      lede="Every week in the season, and how many of the crew can actually make it. The tallest bars in April or September are the ones worth booking."
+      lede="Every week in the window, and how many of the crew can actually make it. A tall bar in October or November is the one to book — those two months carry the best conditions of the window."
     >
       {withWindows.length === 0 ? (
         <Notice title="Nobody has said when they can get away">
@@ -106,8 +108,8 @@ export default async function DatesPage() {
               ))}
             </div>
             <p className="text-sm text-slate2 mt-4">
-              Ochre is the best-covered week. The half-lit bars are April and September, when the
-              swell almost never misses — a week there is worth one fewer person.
+              Ochre is the best-covered week. The half-lit bars are October and November, which
+              carry the window&rsquo;s best conditions — a week there is worth one fewer person.
             </p>
           </div>
 

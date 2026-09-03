@@ -4,12 +4,14 @@
 export const TRIP = {
   name: 'Chicama',
   subtitle: 'the longest left on earth',
-  // Placeholder until the crew locks a week — /dates collects the overlap that
-  // decides it. Season runs Apr–Oct; Apr and Sep carry the best odds.
+  // Narrowed to the back end of the season on 2026-09-03. See src/lib/season.ts
+  // for the reanalysis behind it: October carries the highest share of standout
+  // days of any month in the record, November is nearly as good and the driest
+  // and quietest, and December falls away sharply after the 10th.
   window: {
-    label: 'April – October 2027',
-    start: '2027-04-01',
-    end: '2027-10-31',
+    label: 'October – early December 2027',
+    start: '2027-10-01',
+    end: '2027-12-15',
     locked: false,
   },
   groom: null as string | null,

@@ -173,7 +173,7 @@ export default async function Home() {
               <p>
                 {TRIP.window.locked
                   ? `We go ${TRIP.window.label}.`
-                  : `The window is ${TRIP.window.label} — April and September carry the best odds of swell. Add the weeks you can actually get away and the overlap will pick it.`}
+                  : `The window is ${TRIP.window.label}. October and November are the strongest of it — add the weeks you can actually get away and the overlap will pick the date.`}
               </p>
               <p>
                 <Link href="/dates" className="underline underline-offset-2 text-ink">
