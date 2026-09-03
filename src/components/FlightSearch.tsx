@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { routeOptions } from '@/lib/flightSearch'
+import FlightLinks from './FlightLinks'
 import type { ProposedWeek } from '@/lib/weeks'
 
 const KEY = 'chicama_origin'
@@ -46,7 +46,6 @@ export default function FlightSearch({
 
   const week = weeks.find((w) => w.key === weekKey) ?? weeks[0]
   const ready = /^[A-Z]{3}$/.test(origin)
-  const routes = ready ? routeOptions(origin, week.start, week.end) : null
 
   return (
     <div className="card p-5 md:p-6">
@@ -113,32 +112,9 @@ export default function FlightSearch({
           Three letters and the searches below light up — {week.label}, return, already filled in.
         </p>
       ) : (
-        <div className="mt-6 space-y-5">
-          {Object.entries(routes!).map(([key, route]) => (
-            <div key={key} className="border-t border-hairline pt-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
-                <h3 className="display text-lg">{route.label}</h3>
-                <span className="mono text-xs text-slate2">
-                  {week.start} → {week.end}
-                </span>
-              </div>
-              <p className="text-sm text-slate2 mb-3">{route.note}</p>
-              <div className="flex flex-wrap gap-2">
-                {route.links.map((link) => (
-                  <a
-                    key={link.name}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={key === 'through' ? 'btn' : 'btn btn-quiet'}
-                  >
-                    {link.name} ↗
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
-          <p className="text-xs text-slate2 border-t border-hairline pt-4">
+        <div className="mt-6">
+          <FlightLinks origin={origin} week={week} />
+          <p className="text-xs text-slate2 border-t border-hairline pt-4 mt-5">
             Book the return for {week.end} or later — the hotel shuttle back to Trujillo takes an
             hour and a half, so an early flight out means leaving before dawn.
           </p>

@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FOIL_LEVELS, GEAR_ITEMS, PASSPORT_MONTHS_REQUIRED, TRIP } from '@/lib/config'
 import type { Attendee, DateVote, Window } from '@/lib/attendees'
-import { PROPOSED_WEEKS, type Vote } from '@/lib/weeks'
+import { PROPOSED_WEEKS, type Vote, type ProposedWeek } from '@/lib/weeks'
+import FlightLinks from './FlightLinks'
 
 type Draft = Record<string, string | boolean | string[]>
 
@@ -67,10 +68,13 @@ export default function AttendeeForm({
   attendee,
   windows,
   votes,
+  leadingWeekKey,
 }: {
   attendee: Attendee | null
   windows: Window[]
   votes: DateVote[]
+  /** Whichever week the group is currently converging on. */
+  leadingWeekKey: string
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -133,6 +137,17 @@ export default function AttendeeForm({
     cutoff.setMonth(cutoff.getMonth() + PASSPORT_MONTHS_REQUIRED)
     return new Date(value) < cutoff
   })()
+
+  // Search the week this person actually said yes to, falling back to whatever
+  // the group is converging on. Searching dates they cannot make is worse than
+  // useless.
+  const searchWeek: ProposedWeek =
+    PROPOSED_WEEKS.find((w) => weekVotes[w.key] === 'yes') ??
+    PROPOSED_WEEKS.find((w) => weekVotes[w.key] === 'maybe') ??
+    PROPOSED_WEEKS.find((w) => w.key === leadingWeekKey) ??
+    PROPOSED_WEEKS[0]
+
+  const originReady = /^[A-Z]{3}$/.test((draft.origin_airport as string) ?? '')
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -212,6 +227,112 @@ export default function AttendeeForm({
         </Field>
       </Fieldset>
 
+      {!TRIP.window.locked && (
+        <Fieldset
+          n="The line-up"
+          title="Which weeks work?"
+          hint="Three proposed weeks, picked on five years of conditions data. Say yes to every one you could make — the most yeses wins."
+        >
+          <div className="sm:col-span-2 space-y-3">
+            {PROPOSED_WEEKS.map((week) => (
+              <div key={week.key} className="border border-hairline p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
+                  <span className="display text-lg">{week.label}</span>
+                  <span className="mono text-xs text-slate2">
+                    {week.good}% good days · {week.firing}% firing
+                  </span>
+                </div>
+                <p className="text-sm text-slate2 mb-3">{week.pitch}</p>
+                <div className="flex gap-2" role="group" aria-label={`Can you make ${week.label}?`}>
+                  {(['yes', 'maybe', 'no'] as Vote[]).map((option) => {
+                    const on = weekVotes[week.key] === option
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => {
+                          setWeekVotes((v) => ({ ...v, [week.key]: option }))
+                          setSaved(false)
+                        }}
+                        className={
+                          'px-4 py-1.5 text-sm border capitalize transition-colors ' +
+                          (on
+                            ? 'bg-ink text-foam border-ink'
+                            : 'bg-foam border-hairline hover:bg-bone2')
+                        }
+                      >
+                        {option}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <details className="border-t border-hairline pt-4">
+              <summary className="text-sm cursor-pointer text-slate2 hover:text-ink">
+                None of those work? Add your own dates
+              </summary>
+              <div className="space-y-3 mt-4">
+                {ranges.map((range, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-3">
+                    <div>
+                      <label className="label" htmlFor={`start-${i}`}>
+                        From
+                      </label>
+                      <input
+                        id={`start-${i}`}
+                        type="date"
+                        className="field mono w-auto"
+                        min={TRIP.window.start}
+                        max={TRIP.window.end}
+                        value={range.start}
+                        onChange={(e) =>
+                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor={`end-${i}`}>
+                        To
+                      </label>
+                      <input
+                        id={`end-${i}`}
+                        type="date"
+                        className="field mono w-auto"
+                        min={range.start || TRIP.window.start}
+                        max={TRIP.window.end}
+                        value={range.end}
+                        onChange={(e) =>
+                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    {ranges.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-sm text-slate2 hover:text-rust underline underline-offset-2 pb-2.5"
+                        onClick={() => setRanges((r) => r.filter((_, j) => j !== i))}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  onClick={() => setRanges((r) => [...r, { start: '', end: '' }])}
+                >
+                  Add another range
+                </button>
+              </div>
+            </details>
+          </div>
+        </Fieldset>
+      )}
+
       <Fieldset
         n="700m · Keys"
         title="Getting there"
@@ -236,6 +357,17 @@ export default function AttendeeForm({
             onChange={(e) => set('origin_airport', e.target.value.toUpperCase())}
           />
         </Field>
+        <div className="sm:col-span-2">
+          {originReady ? (
+            <FlightLinks origin={draft.origin_airport as string} week={searchWeek} compact />
+          ) : (
+            <p className="text-sm text-slate2 border border-dashed border-hairline p-4">
+              Put your home airport in above and the flight search appears here, dates already
+              filled in — no need to go anywhere else.
+            </p>
+          )}
+        </div>
+
         <Field name="arrival_flight" label="Arriving on flight">
           <input
             id="arrival_flight"
@@ -443,112 +575,6 @@ export default function AttendeeForm({
           />
         </Field>
       </Fieldset>
-
-      {!TRIP.window.locked && (
-        <Fieldset
-          n="Line-up"
-          title="Which weeks work?"
-          hint="Three proposed weeks, picked on five years of conditions data. Say yes to every one you could make — the most yeses wins."
-        >
-          <div className="sm:col-span-2 space-y-3">
-            {PROPOSED_WEEKS.map((week) => (
-              <div key={week.key} className="border border-hairline p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
-                  <span className="display text-lg">{week.label}</span>
-                  <span className="mono text-xs text-slate2">
-                    {week.good}% good days · {week.firing}% firing
-                  </span>
-                </div>
-                <p className="text-sm text-slate2 mb-3">{week.pitch}</p>
-                <div className="flex gap-2" role="group" aria-label={`Can you make ${week.label}?`}>
-                  {(['yes', 'maybe', 'no'] as Vote[]).map((option) => {
-                    const on = weekVotes[week.key] === option
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => {
-                          setWeekVotes((v) => ({ ...v, [week.key]: option }))
-                          setSaved(false)
-                        }}
-                        className={
-                          'px-4 py-1.5 text-sm border capitalize transition-colors ' +
-                          (on
-                            ? 'bg-ink text-foam border-ink'
-                            : 'bg-foam border-hairline hover:bg-bone2')
-                        }
-                      >
-                        {option}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-
-            <details className="border-t border-hairline pt-4">
-              <summary className="text-sm cursor-pointer text-slate2 hover:text-ink">
-                None of those work? Add your own dates
-              </summary>
-              <div className="space-y-3 mt-4">
-                {ranges.map((range, i) => (
-                  <div key={i} className="flex flex-wrap items-end gap-3">
-                    <div>
-                      <label className="label" htmlFor={`start-${i}`}>
-                        From
-                      </label>
-                      <input
-                        id={`start-${i}`}
-                        type="date"
-                        className="field mono w-auto"
-                        min={TRIP.window.start}
-                        max={TRIP.window.end}
-                        value={range.start}
-                        onChange={(e) =>
-                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="label" htmlFor={`end-${i}`}>
-                        To
-                      </label>
-                      <input
-                        id={`end-${i}`}
-                        type="date"
-                        className="field mono w-auto"
-                        min={range.start || TRIP.window.start}
-                        max={TRIP.window.end}
-                        value={range.end}
-                        onChange={(e) =>
-                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))
-                        }
-                      />
-                    </div>
-                    {ranges.length > 1 && (
-                      <button
-                        type="button"
-                        className="text-sm text-slate2 hover:text-rust underline underline-offset-2 pb-2.5"
-                        onClick={() => setRanges((r) => r.filter((_, j) => j !== i))}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="btn btn-quiet"
-                  onClick={() => setRanges((r) => [...r, { start: '', end: '' }])}
-                >
-                  Add another range
-                </button>
-              </div>
-            </details>
-          </div>
-        </Fieldset>
-      )}
 
       <div className="border-t border-hairline pt-6 flex flex-wrap items-center gap-4">
         <button type="submit" className="btn" disabled={saving}>

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Notice, Page } from '@/components/ui'
 import FlightSearch from '@/components/FlightSearch'
 import { listAttendees, listVotes } from '@/lib/attendees'
@@ -50,6 +51,23 @@ export default async function FlightsPage() {
           .filter((a) => a.origin_airport)
           .map((a) => ({ name: a.nickname || a.name, airport: a.origin_airport!.toUpperCase() }))}
       />
+
+      {/* Close the loop: a flight nobody records is a flight the budget and the
+          arrivals board cannot see. */}
+      <section className="mt-6">
+        <div className="card border-l-2 border-l-ochre p-5 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold mb-0.5">Booked something?</p>
+            <p className="text-sm text-slate2">
+              Put the flight number, landing time and price on your own page — that is what fills in
+              the shuttle groupings and the budget.
+            </p>
+          </div>
+          <Link href="/me" className="btn shrink-0">
+            Record your flight
+          </Link>
+        </div>
+      </section>
 
       {/* Indicative cached prices, when the optional free token is set. The
           search above is the primary path and never depends on this. */}
