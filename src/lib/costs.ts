@@ -20,7 +20,10 @@ export type Assumptions = {
   foodPerDayUsd: number
   /** Board and foil hire per day, for whoever is not bringing their own. */
   rentalPerDayUsd: number
-  /** Anything else per person — tow-back sessions, tips, the kitty. */
+  /**
+   * Tow-ins, tips and the kitty. The hotel publishes no tow-back price, so this
+   * is a placeholder rather than a rate — get it in the group quote.
+   */
   extrasUsd: number
   /** Whether to model the 18% IGV that foreign tourists can be exempt from. */
   payingIgv: boolean
@@ -53,6 +56,8 @@ export type PersonCost = {
   rental: number
   extras: number
   flight: number | null
+  /** True when `flight` is a live fare estimate rather than what they paid. */
+  flightEstimated: boolean
   /** Everything except the flight, which many people will not have booked yet. */
   onTheGround: number
   total: number | null
@@ -67,6 +72,8 @@ export function costFor(
     needs_transfer: boolean
     flight_cost_usd: number | string | null
     paid_status: string
+    /** Cheapest live fare for their origin, used until they book. */
+    flight_estimate_usd?: number | null
   },
   a: Assumptions,
 ): PersonCost {
@@ -84,10 +91,15 @@ export function costFor(
   const rental = hasOwn ? 0 : a.rentalPerDayUsd * a.nights
 
   const transfer = person.needs_transfer ? a.transferUsd : 0
-  const flight =
+  const booked =
     person.flight_cost_usd == null || person.flight_cost_usd === ''
       ? null
       : Number(person.flight_cost_usd)
+  // Fall back to the live fare so the budget is useful before anyone books —
+  // marked as an estimate rather than passed off as a real cost.
+  const estimate = person.flight_estimate_usd ?? null
+  const flight = booked ?? estimate
+  const flightEstimated = booked == null && estimate != null
 
   const onTheGround = room + transfer + food + rental + a.extrasUsd
 
@@ -99,6 +111,7 @@ export function costFor(
     rental,
     extras: a.extrasUsd,
     flight: Number.isFinite(flight as number) ? (flight as number) : null,
+    flightEstimated,
     onTheGround,
     total: flight == null ? null : onTheGround + flight,
     paid: person.paid_status,

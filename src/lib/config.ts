@@ -29,6 +29,10 @@ export const TRIP = {
       { key: 'ocean', label: 'Standard Ocean View', count: 10, fromUsd: 160 },
       { key: 'premium', label: 'Premium (A/C, bay view)', count: 3, fromUsd: 180 },
     ],
+    // The hotel advertises a tow-back boat and a hydrofoil programme but
+    // publishes no prices for either, so nothing here assumes they are
+    // included. The group enquiry on /hotel asks for both in writing.
+    towBack: { offered: true, includedInRoomRate: false, priceKnown: false },
     transferFrom: 'TRU',
     transferKm: 85,
     transferHours: 1.5,

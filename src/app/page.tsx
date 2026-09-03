@@ -45,7 +45,7 @@ export default async function Home() {
     <div className="max-w-page mx-auto px-6">
       <section className="pt-14 md:pt-20 relative pb-28 sm:pb-32">
         <p className="marker mb-4">
-          {TRIP.groom ? `${TRIP.groom}'s last ride · ` : ''}8°04′S 79°26′W · {TRIP.venue.town}
+          8°04′S 79°26′W · {TRIP.venue.town}
         </p>
         <h1 className="display text-[15vw] leading-[0.82] md:text-[9rem] mb-6">
           THE LONGEST
@@ -53,9 +53,8 @@ export default async function Home() {
           LEFT ON EARTH
         </h1>
         <p className="text-lg text-slate2 max-w-xl">
-          Two and a half kilometres of wave, one point, and however many of us can get there
-          {TRIP.groom ? ` before ${TRIP.groom} gets married` : ''}. Put your details in and the rest
-          of it — flights, transfers, rooms — assembles itself.
+          Two and a half kilometres of wave, one point, and however many of us can get there. Put
+          your details in and the rest of it — flights, transfers, rooms — assembles itself.
         </p>
         <p className="mono text-sm text-slate2 mt-3">{TRIP.window.label}</p>
         <div className="flex flex-wrap gap-3 mt-8">

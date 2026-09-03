@@ -4,15 +4,23 @@ import BudgetCalculator from '@/components/BudgetCalculator'
 import { listAttendees } from '@/lib/attendees'
 import { IGV_RATE } from '@/lib/costs'
 import { TRIP } from '@/lib/config'
+import { cachedFare } from '@/lib/fares-cache'
+import { PROPOSED_WEEKS, tallyWeeks } from '@/lib/weeks'
+import { listVotes } from '@/lib/attendees'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Budget — Chicama' }
 
 export default async function BudgetPage() {
-  const people = (await listAttendees())
-    .filter((a) => a.status !== 'out')
-    .map((a) => ({
+  const votes = await listVotes()
+  // Estimate against whichever week the group is converging on.
+  const leading = tallyWeeks(votes)[0] ?? PROPOSED_WEEKS[0]
+
+  const people = await Promise.all(
+    (await listAttendees())
+      .filter((a) => a.status !== 'out')
+      .map(async (a) => ({
       id: a.id,
       name: a.nickname || a.name,
       room_pref: a.room_pref,
@@ -20,7 +28,11 @@ export default async function BudgetPage() {
       needs_transfer: a.needs_transfer,
       flight_cost_usd: a.flight_cost_usd,
       paid_status: a.paid_status,
-    }))
+      flight_estimate_usd: a.origin_airport
+        ? ((await cachedFare(a.origin_airport.toUpperCase(), leading.start))?.usd ?? null)
+        : null,
+    })),
+  )
 
   return (
     <Page

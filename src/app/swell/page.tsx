@@ -39,7 +39,7 @@ export default async function SwellPage() {
             <thead>
               <tr className="border-b border-hairline">
                 {['Day', 'Swell', 'Period', 'Direction', 'Wind', 'Call'].map((h) => (
-                  <th key={h} className="label text-left px-4 py-3">
+                  <th key={h} className="th text-left px-4 py-3">
                     {h}
                   </th>
                 ))}
@@ -148,7 +148,7 @@ export default async function SwellPage() {
             <thead>
               <tr className="border-b border-hairline">
                 {['Block', 'Good or better', 'Firing', 'Mean period', 'Mean swell', 'Water'].map((h) => (
-                  <th key={h} className="label text-left px-4 py-3">
+                  <th key={h} className="th text-left px-4 py-3">
                     {h}
                   </th>
                 ))}

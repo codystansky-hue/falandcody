@@ -12,6 +12,7 @@ type Person = {
   bringing_gear: string[]
   needs_transfer: boolean
   flight_cost_usd: number | string | null
+  flight_estimate_usd?: number | null
   paid_status: string
 }
 
@@ -63,8 +64,10 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
 
   const costs = people.map((p) => costFor(p, a))
   const groundTotal = costs.reduce((sum, c) => sum + c.onTheGround, 0)
-  const flightsKnown = costs.filter((c) => c.flight != null)
-  const flightTotal = flightsKnown.reduce((sum, c) => sum + (c.flight ?? 0), 0)
+  const booked = costs.filter((c) => c.flight != null && !c.flightEstimated)
+  const withAnyFlight = costs.filter((c) => c.flight != null)
+  const flightTotal = withAnyFlight.reduce((sum, c) => sum + (c.flight ?? 0), 0)
+  const estimatedCount = withAnyFlight.length - booked.length
   const perHead = costs.length ? groundTotal / costs.length : 0
 
   // The single biggest lever, shown rather than explained.
@@ -90,15 +93,16 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
           <p className="text-xs text-slate2 mt-1.5">{people.length} people</p>
         </div>
         <div className="card p-4">
-          <p className="label mb-1">Flights booked so far</p>
+          <p className="label mb-1">Flights</p>
           <p className="mono text-2xl leading-none">{usd(flightTotal)}</p>
           <p className="text-xs text-slate2 mt-1.5">
-            {flightsKnown.length} of {people.length} have entered a price
+            {booked.length} booked
+            {estimatedCount > 0 && `, ${estimatedCount} estimated live`}
           </p>
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[22rem_1fr] items-start">
+      <div className="grid gap-8 lg:grid-cols-[22rem_minmax(0,1fr)] items-start">
         <section className="card p-5">
           <p className="marker mb-3">Assumptions</p>
           <div className="divide-y divide-hairline">
@@ -161,7 +165,7 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                 onChange={(e) => set('rentalPerDayUsd', num(e.target.value))}
               />
             </Row>
-            <Row label="Extras" hint="tow-back, tips, the kitty">
+            <Row label="Tow-ins, tips, kitty" hint="Tow-back price is NOT published — assumption only">
               <input
                 type="number"
                 min={0}
@@ -183,7 +187,7 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
           </p>
         </section>
 
-        <div className="space-y-8">
+        <div className="space-y-8 min-w-0">
           <section>
             <p className="marker mb-3">What sharing does</p>
             <div className="card divide-y divide-hairline">
@@ -221,45 +225,101 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                 still work as a back-of-envelope for one person.
               </p>
             ) : (
-              <div className="overflow-x-auto card">
-                <table className="w-full text-sm border-collapse min-w-[42rem]">
-                  <thead>
-                    <tr className="border-b border-hairline">
-                      {['Who', 'Room', 'Transfer', 'Food', 'Hire', 'Extras', 'Ground', 'Flight', 'Total'].map(
-                        (h) => (
-                          <th key={h} className="label text-left px-3 py-3">
-                            {h}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {costs.map((c) => (
-                      <tr key={c.name} className="border-b border-hairline last:border-0">
-                        <td className="px-3 py-2.5 font-medium">
+              <>
+                {/* Phone: one card per person. A nine-column table is unreadable
+                    at 390px even inside a scroller. */}
+                <ul className="md:hidden space-y-3">
+                  {costs.map((c) => (
+                    <li key={c.name} className="card p-4">
+                      <div className="flex items-baseline justify-between gap-3 mb-2">
+                        <span className="font-medium">
                           {c.name}
                           {c.paid !== 'unpaid' && (
                             <span className="marker ml-2 text-ochre">{c.paid}</span>
                           )}
-                        </td>
-                        <td className="px-3 py-2.5 mono">{usd(c.room)}</td>
-                        <td className="px-3 py-2.5 mono">{usd(c.transfer)}</td>
-                        <td className="px-3 py-2.5 mono">{usd(c.food)}</td>
-                        <td className="px-3 py-2.5 mono">{c.rental ? usd(c.rental) : '—'}</td>
-                        <td className="px-3 py-2.5 mono">{usd(c.extras)}</td>
-                        <td className="px-3 py-2.5 mono font-medium">{usd(c.onTheGround)}</td>
-                        <td className="px-3 py-2.5 mono">
-                          {c.flight == null ? <span className="text-slate2">not booked</span> : usd(c.flight)}
-                        </td>
-                        <td className="px-3 py-2.5 mono font-medium">
-                          {c.total == null ? <span className="text-slate2">—</span> : usd(c.total)}
-                        </td>
+                        </span>
+                        <span className="mono font-medium">
+                          {c.total == null ? usd(c.onTheGround) : usd(c.total)}
+                        </span>
+                      </div>
+                      <dl className="text-sm space-y-1">
+                        {[
+                          ['Room', usd(c.room)],
+                          ['Transfer', usd(c.transfer)],
+                          ['Food', usd(c.food)],
+                          ['Gear hire', c.rental ? usd(c.rental) : '—'],
+                          ['Extras', usd(c.extras)],
+                        ].map(([k, v]) => (
+                          <div key={k} className="flex justify-between">
+                            <dt className="text-slate2">{k}</dt>
+                            <dd className="mono">{v}</dd>
+                          </div>
+                        ))}
+                        <div className="flex justify-between border-t border-hairline pt-1 mt-1">
+                          <dt className="text-slate2">
+                            Flight
+                            {c.flightEstimated && <span className="marker ml-1.5">est</span>}
+                          </dt>
+                          <dd className="mono">
+                            {c.flight == null ? (
+                              <span className="text-slate2">not booked</span>
+                            ) : (
+                              usd(c.flight)
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="hidden md:block overflow-x-auto card">
+                  <table className="w-full text-sm border-collapse min-w-[42rem]">
+                    <thead>
+                      <tr className="border-b border-hairline">
+                        {['Who', 'Room', 'Transfer', 'Food', 'Hire', 'Extras', 'Ground', 'Flight', 'Total'].map(
+                          (h) => (
+                            <th key={h} className="th px-3 py-3">
+                              {h}
+                            </th>
+                          ),
+                        )}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {costs.map((c) => (
+                        <tr key={c.name} className="border-b border-hairline last:border-0">
+                          <td className="px-3 py-2.5 font-medium whitespace-nowrap">
+                            {c.name}
+                            {c.paid !== 'unpaid' && (
+                              <span className="marker ml-2 text-ochre">{c.paid}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 mono">{usd(c.room)}</td>
+                          <td className="px-3 py-2.5 mono">{usd(c.transfer)}</td>
+                          <td className="px-3 py-2.5 mono">{usd(c.food)}</td>
+                          <td className="px-3 py-2.5 mono">{c.rental ? usd(c.rental) : '—'}</td>
+                          <td className="px-3 py-2.5 mono">{usd(c.extras)}</td>
+                          <td className="px-3 py-2.5 mono font-medium">{usd(c.onTheGround)}</td>
+                          <td className="px-3 py-2.5 mono whitespace-nowrap">
+                            {c.flight == null ? (
+                              <span className="text-slate2">not booked</span>
+                            ) : (
+                              <>
+                                {usd(c.flight)}
+                                {c.flightEstimated && <span className="marker ml-1.5">est</span>}
+                              </>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 mono font-medium">
+                            {c.total == null ? <span className="text-slate2">—</span> : usd(c.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
         </div>

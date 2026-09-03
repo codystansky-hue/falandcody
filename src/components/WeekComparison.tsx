@@ -51,19 +51,70 @@ export default async function WeekComparison({
 
   return (
     <div>
-    <div className="overflow-x-auto card">
+      {/* Phone: one card per week. The price columns are the entire point of
+          this table and they sit off-screen at 390px however it scrolls. */}
+      <ul className="lg:hidden space-y-3">
+        {PROPOSED_WEEKS.map((week) => {
+          const tally = ranked.find((r) => r.key === week.key)!
+          const row = priced.find((p) => p.key === week.key)
+          const isCheapest =
+            row?.groupTotal != null && cheapestTotal != null && row.groupTotal === cheapestTotal
+          return (
+            <li key={week.key} className={'card p-4 ' + (isCheapest ? 'border-l-2 border-l-ochre' : '')}>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="display text-lg">{week.label}</span>
+                {isCheapest && <span className="marker text-ochre">cheapest</span>}
+              </div>
+              <p className="mono text-xs text-slate2 mt-0.5">
+                {week.good}% good · {week.firing}% firing · {tally.yes}Y {tally.maybe}M {tally.no}N
+              </p>
+              <dl className="text-sm mt-3 space-y-1">
+                {origins.map((origin) => {
+                  const cell = row?.perOrigin.find((p) => p.origin === origin)
+                  return (
+                    <div key={origin} className="flex justify-between">
+                      <dt className="mono text-slate2">{origin}</dt>
+                      <dd className="mono">
+                        {cell?.fare ? (
+                          <span className={cell.fare.stale ? 'text-slate2' : undefined}>
+                            ${cell.fare.usd.toFixed(0)}
+                          </span>
+                        ) : (
+                          <span className="text-slate2">—</span>
+                        )}
+                      </dd>
+                    </div>
+                  )
+                })}
+                <div className="flex justify-between border-t border-hairline pt-1.5 mt-1.5 font-medium">
+                  <dt>Group flights</dt>
+                  <dd className="mono">
+                    {row?.groupTotal == null ? (
+                      <span className="text-slate2 font-normal">—</span>
+                    ) : (
+                      `$${row.groupTotal.toFixed(0)}`
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </li>
+          )
+        })}
+      </ul>
+
+    <div className="hidden lg:block overflow-x-auto card">
       <table className="w-full text-sm border-collapse min-w-[46rem]">
         <thead>
           <tr className="border-b border-hairline">
-            <th className="label text-left px-4 py-3">Week</th>
-            <th className="label text-left px-4 py-3">Conditions</th>
-            <th className="label text-left px-4 py-3">Vote</th>
+            <th className="th text-left px-4 py-3">Week</th>
+            <th className="th text-left px-4 py-3">Conditions</th>
+            <th className="th text-left px-4 py-3">Vote</th>
             {origins.map((origin) => (
-              <th key={origin} className="label text-left px-4 py-3 mono">
+              <th key={origin} className="th text-left px-4 py-3 mono">
                 {origin}
               </th>
             ))}
-            <th className="label text-left px-4 py-3">Group flights</th>
+            <th className="th text-left px-4 py-3">Group flights</th>
           </tr>
         </thead>
         <tbody>

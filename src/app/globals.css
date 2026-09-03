@@ -114,6 +114,19 @@ body {
     background: var(--bone-2);
   }
 
+  /* Table header cell. Deliberately NOT `.label` — that sets display:block,
+     which drops a <th> out of the table layout and stacks every header
+     vertically. Same look, correct display. */
+  .th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--slate);
+    white-space: nowrap;
+    text-align: left;
+  }
+
   .label {
     display: block;
     font-size: 0.75rem;

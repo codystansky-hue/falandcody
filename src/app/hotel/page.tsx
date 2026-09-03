@@ -136,6 +136,32 @@ export default async function HotelPage() {
       </section>
 
       <section className="mt-14">
+        <p className="marker mb-3">What the room rate does and does not cover</p>
+        <dl className="text-sm divide-y divide-hairline border-t border-hairline max-w-2xl">
+          {[
+            ['Breakfast', 'Included', true],
+            ['Pool, spa, jacuzzis, sauna, gym, yoga', 'Included', true],
+            ['Board room for the gear', 'Included', true],
+            ['Wi-Fi and parking', 'Included', true],
+            ['Tow-ins / tow-back boat', 'NOT included, and no price published', false],
+            ['Hydrofoil hire', 'NOT included, and no price published', false],
+            ['Airport transfers from Trujillo', 'Not included in the rate — quoted separately', false],
+            ['Lunch and dinner', 'Not included', false],
+          ].map(([what, status, yes]) => (
+            <div key={what as string} className="flex justify-between gap-4 py-2.5">
+              <dt>{what}</dt>
+              <dd className={yes ? 'text-sea shrink-0' : 'text-rust shrink-0'}>{status}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-sm text-slate2 mt-3 max-w-2xl">
+          The hotel advertises a tow-back boat and a hydrofoil programme but publishes no rates for
+          either, so assume you are paying for tow-ins on top. The enquiry above asks for both in
+          writing — get the number before anyone budgets around it.
+        </p>
+      </section>
+
+      <section className="mt-14">
         <p className="marker mb-3">Terms worth knowing before you pay</p>
         <ul className="text-sm text-slate2 space-y-2 max-w-2xl">
           <li>

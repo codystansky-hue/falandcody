@@ -62,7 +62,7 @@ export function Table({ head, children }: { head: string[]; children: ReactNode 
         <thead>
           <tr className="border-b border-hairline">
             {head.map((h) => (
-              <th key={h} className="label text-left px-4 py-3 mb-0">
+              <th key={h} className="th text-left px-4 py-3 mb-0">
                 {h}
               </th>
             ))}
