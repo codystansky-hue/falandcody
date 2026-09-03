@@ -1,0 +1,87 @@
+# Chicama 🌊
+
+Trip site for the Chicama bachelor party — [Chicama Boutique Hotel](https://www.chicamaboutiquehotel.com/),
+Puerto Malabrigo, Peru. The crew fills in their own details; the flights, transfers, rooming and
+swell assemble themselves around that.
+
+Runs on Vercel Hobby and Neon Free. **Nothing here costs money.**
+
+---
+
+## Where it came from
+
+Ported by hand from [`aaronparton2-sketch/swell-event`](https://github.com/aaronparton2-sketch/swell-event)
+(MIT) — an n8n workflow that watches a Surfline forecast and, when the swell fires, scrapes flights
+and a villa, polls a Telegram group, and makes AI voice calls to book a taxi and a beer run.
+
+Its trigger premise does not apply to a trip with a booked venue and a chosen week. The
+*information* it assembles does. Every paid dependency was replaced with a free one:
+
+| swell-event node | Here | Cost | Key |
+|---|---|---|---|
+| Surfline wave + wind (via r.jina.ai) | Open-Meteo Marine + Forecast — `src/lib/swell.ts` | free | none |
+| Evaluate swell / Swell ON? | `scoreSwell()` — period-weighted, SSW 190–235°, offshore ≈150° | free | none |
+| Apify flight scraper | Travelpayouts Aviasales Data API — `src/lib/fares.ts` | free | free token |
+| Apify villa scraper | dropped — the venue is chosen | — | — |
+| Telegram message + poll | the site itself | free | none |
+| Gmail check + send | dropped | — | — |
+| AeroDataBox flight tracking | OpenSky arrivals at `SPRU` — `src/lib/opensky.ts` | free | free OAuth2 client |
+| Bland AI taxi call | shuttle grouping + pickup manifest — `groupShuttles()` | free | — |
+| Bland AI beer run | dropped — the hotel has a bar | — | — |
+| `every 6h` schedule | Next.js fetch revalidation | free | — |
+
+**The one thing that could not be made free:** outbound voice calls to Peru cost money from any
+provider. `/arrivals` tracks who is on the ground and groups the vans, but nobody gets phoned.
+
+**No cron.** Vercel Hobby caps cron at once per day, which would have forced a GitHub Actions
+scheduler. Because nothing needs to happen while nobody is looking, every external feed is read in
+a server component behind `fetch(..., { next: { revalidate } })` instead — swell 1 h, fares 24 h,
+OpenSky 5 min.
+
+---
+
+## Running it
+
+```bash
+npm install
+vercel env pull .env.local      # or copy .env.example and fill it in
+npm run migrate                 # applies db/schema.sql
+npm run dev
+```
+
+`npx tsc --noEmit` is the type gate — `next build` alone tolerates errors that `tsc` does not.
+
+## Environment
+
+| Variable | Needed for | Without it |
+|---|---|---|
+| `DATABASE_URL` | everything that persists | `/me` says there is no database; the rest still renders |
+| `GATE_SECRET` | signing the gate cookie | nobody can get past `/gate` |
+| `GATE_PASSPHRASE` | the shared passphrase | `/api/gate` returns 503 with the reason |
+| `ADMIN_PASSPHRASE` | `/admin` | organiser view stays locked |
+| `TRAVELPAYOUTS_TOKEN` | `/flights` | page explains how to switch it on |
+| `OPENSKY_CLIENT_ID` / `_SECRET` | live tracking on `/arrivals` | board still works off typed-in times |
+
+Both optional integrations render an explicit unconfigured state. The site is fully usable before
+either account exists.
+
+## Layout
+
+```
+src/lib/        swell · fares · opensky · attendees · auth · db · config
+src/app/        gate · me · roster · dates · swell · flights · arrivals · admin
+middleware.ts   passphrase gate, plus a second one on /admin
+db/schema.sql   attendees · availability · fare_snapshots · swell_snapshots
+```
+
+Everything Cody still has to decide — the window, the groom, the venue facts — lives in
+`src/lib/config.ts`.
+
+## Notes
+
+- **Times are Peru time.** Peru is UTC−5 year round with no DST; arrival and departure inputs are
+  pinned to it so shuttle grouping does not drift by the organiser's own offset.
+- **Passports.** Peru wants six months of validity past entry. The form checks against the end of
+  the window, not today, and `/admin` lists anyone short.
+- **No accounts.** Each person gets an `edit_token`, kept in a cookie and shareable as
+  `/me?token=…` so they can edit from another device.
