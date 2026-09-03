@@ -19,7 +19,7 @@ export const TRIP = {
     end: '2026-12-10',
     locked: false,
   },
-  groom: null as string | null,
+  groom: 'Cody' as string | null,
   venue: {
     name: 'Chicama Boutique Hotel',
     town: 'Puerto Malabrigo, La Libertad, Peru',
