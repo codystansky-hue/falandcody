@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { hoursLabel, journeyFor, suggest } from '@/lib/journey'
 import { cheapestFrom, isFaresConfigured } from '@/lib/fares'
+import { cheapestRoundTrip } from '@/lib/googleFlights'
 import { PROPOSED_WEEKS, weekByKey } from '@/lib/weeks'
 import { AIRPORTS } from '@/lib/config'
 
@@ -32,6 +33,19 @@ export async function GET(request: Request) {
       { error: `No airport with the code ${origin.toUpperCase()}.`, suggestions: suggest(origin) },
       { status: 404 },
     )
+  }
+
+  // Live Google fares, keyless. Runs alongside the Travelpayouts path so one
+  // can cover for the other.
+  if (params.get('probe') === 'google') {
+    const week = weekByKey(params.get('week') ?? 'nov07') ?? PROPOSED_WEEKS[0]
+    const fare = await cheapestRoundTrip(
+      journey.origin.iata,
+      AIRPORTS.gateway.iata,
+      week.start,
+      week.end,
+    )
+    return NextResponse.json({ origin: journey.origin.iata, week: week.label, fare })
   }
 
   // Prices per proposed week, so the group can compare weeks rather than just
