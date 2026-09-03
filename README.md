@@ -65,14 +65,58 @@ npm run dev
 Both optional integrations render an explicit unconfigured state. The site is fully usable before
 either account exists.
 
+## Point an agent at it
+
+`/api/mcp` is a Model Context Protocol server over Streamable HTTP — nine tools, so anyone on the
+trip can talk to the site instead of filling forms:
+
+```bash
+claude mcp add --transport http chicama   "https://chicama-hombres.vercel.app/api/mcp"   --header "Authorization: Bearer <passphrase>"
+```
+
+`?key=<passphrase>` works too, for clients where a header is awkward. Same shared passphrase as the
+site; `src/middleware.ts` exempts the path from the cookie gate because MCP clients cannot do the
+browser cookie dance. `/connect` is the page that explains all this to the crew.
+
+Read tools: `trip_overview`, `proposed_weeks`, `swell_forecast`, `season_outlook`, `crew_list`,
+`find_flights`, `arrivals_board`. Write tools: `join_trip`, `vote_weeks`.
+
+`join_trip` returns an `edit_token`; passing it back updates that person instead of duplicating
+them, and the tool description says so loudly enough that models actually do it.
+
+Hand-rolled JSON-RPC rather than the SDK — no sessions, no streaming, no server-initiated
+messages, so it is about 100 lines of dispatch and survives cold starts with no session store.
+
+## Dates and flights, with the friction taken out
+
+**Dates** are three proposed Saturday-to-Saturday weeks (`src/lib/weeks.ts`) with a yes/maybe/no
+vote, not a blank calendar. Every candidate Saturday was scored against the same calendar days
+across 2021–2025. Free-form ranges survive behind a disclosure.
+
+**Flights** need one input — three letters. `src/lib/flightSearch.ts` builds prefilled Google
+Flights / Kayak / Skyscanner URLs for the winning week, plus the Lima split that people who have
+not been to Peru do not know exists. No key, no account. The optional Travelpayouts token only
+adds indicative prices on top.
+
 ## Layout
 
 ```
-src/lib/        swell · fares · opensky · attendees · auth · db · config
-src/app/        gate · me · roster · dates · swell · flights · arrivals · admin
-middleware.ts   passphrase gate, plus a second one on /admin
-db/schema.sql   attendees · availability · fare_snapshots · swell_snapshots
+src/lib/          swell · season · weeks · fares · flightSearch · opensky
+                  attendees · saveAttendee · auth · db · config
+src/app/          gate · me · roster · dates · swell · flights · arrivals
+                  connect · admin
+src/app/api/mcp   the MCP server
+src/middleware.ts passphrase gate, plus a second one on /admin
+db/schema.sql     attendees · availability · date_votes · fare_snapshots
+                  swell_snapshots
+scripts/season.py regenerates src/lib/season.ts from ERA5
 ```
+
+`saveAttendee.ts` is the single upsert behind both the form route and the MCP `join_trip` tool, so
+validation and Peru-time handling cannot drift between the two doors onto the same table.
+
+Captain — the pixel husky on the hero — is ported from the portfolio site: sprite, the pure
+behaviour module, and its test (`node scripts/test-captain-brain.mjs`).
 
 Everything Cody still has to decide — the window, the groom, the venue facts — lives in
 `src/lib/config.ts`.
