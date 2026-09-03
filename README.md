@@ -71,7 +71,7 @@ either account exists.
 trip can talk to the site instead of filling forms:
 
 ```bash
-claude mcp add --transport http chicama   "https://chicama-hombres.vercel.app/api/mcp"   --header "Authorization: Bearer <passphrase>"
+claude mcp add --transport http chicama "https://chicama-hombres.vercel.app/api/mcp" --header "Authorization: Bearer <passphrase>"
 ```
 
 `?key=<passphrase>` works too, for clients where a header is awkward. Same shared passphrase as the
