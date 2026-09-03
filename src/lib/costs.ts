@@ -20,10 +20,17 @@ export type Assumptions = {
   foodPerDayUsd: number
   /** Board and foil hire per day, for whoever is not bringing their own. */
   rentalPerDayUsd: number
+  /** Tow-in sessions each person wants across the week. */
+  towSessions: number
   /**
-   * Tow-ins, tips and the kitty. The hotel publishes no tow-back price, so this
-   * is a placeholder rather than a rate — get it in the group quote.
+   * Price of ONE private boat session. Foilers cannot use the cheap shared
+   * boat — the hotel excludes them for safety — so this is the only option,
+   * and it splits between at most two foilers.
    */
+  towSessionUsd: number
+  /** Foilers per private boat. The hotel's own limit is 2. */
+  foilersPerBoat: number
+  /** Tips and incidentals. Not the tow-in, which is now its own line. */
   extrasUsd: number
   /** Whether to model the 18% IGV that foreign tourists can be exempt from. */
   payingIgv: boolean
@@ -36,7 +43,11 @@ export const DEFAULTS: Assumptions = {
   transferUsd: 90,
   foodPerDayUsd: 45,
   rentalPerDayUsd: 55,
-  extrasUsd: 150,
+  towSessions: 3,
+  // Low season, which is what November and December are.
+  towSessionUsd: 200,
+  foilersPerBoat: 2,
+  extrasUsd: 120,
   payingIgv: false,
 }
 
@@ -54,6 +65,7 @@ export type PersonCost = {
   transfer: number
   food: number
   rental: number
+  tow: number
   extras: number
   flight: number | null
   /** True when `flight` is a live fare estimate rather than what they paid. */
@@ -71,6 +83,7 @@ export function costFor(
     bringing_gear: string[]
     needs_transfer: boolean
     flight_cost_usd: number | string | null
+    foil_level?: string | null
     paid_status: string
     /** Cheapest live fare for their origin, used until they book. */
     flight_estimate_usd?: number | null
@@ -91,6 +104,11 @@ export function costFor(
   const rental = hasOwn ? 0 : a.rentalPerDayUsd * a.nights
 
   const transfer = person.needs_transfer ? a.transferUsd : 0
+
+  // A private boat split between the maximum number of foilers it will carry.
+  // Anyone who has never foiled is not booking tow-ins.
+  const tows = person.foil_level === 'never' ? 0 : a.towSessions
+  const tow = (tows * a.towSessionUsd) / Math.max(1, a.foilersPerBoat)
   const booked =
     person.flight_cost_usd == null || person.flight_cost_usd === ''
       ? null
@@ -101,7 +119,7 @@ export function costFor(
   const flight = booked ?? estimate
   const flightEstimated = booked == null && estimate != null
 
-  const onTheGround = room + transfer + food + rental + a.extrasUsd
+  const onTheGround = room + transfer + food + rental + tow + a.extrasUsd
 
   return {
     name: person.name,
@@ -109,6 +127,7 @@ export function costFor(
     transfer,
     food,
     rental,
+    tow,
     extras: a.extrasUsd,
     flight: Number.isFinite(flight as number) ? (flight as number) : null,
     flightEstimated,

@@ -143,7 +143,7 @@ export default async function HotelPage() {
             ['Pool, spa, jacuzzis, sauna, gym, yoga', 'Included', true],
             ['Board room for the gear', 'Included', true],
             ['Wi-Fi and parking', 'Included', true],
-            ['Tow-ins / tow-back boat', 'NOT included, and no price published', false],
+            ['Tow-ins / tow-back boat', 'NOT included — see below', false],
             ['Hydrofoil hire', 'NOT included, and no price published', false],
             ['Airport transfers from Trujillo', 'Not included in the rate — quoted separately', false],
             ['Lunch and dinner', 'Not included', false],
@@ -155,9 +155,60 @@ export default async function HotelPage() {
           ))}
         </dl>
         <p className="text-sm text-slate2 mt-3 max-w-2xl">
-          The hotel advertises a tow-back boat and a hydrofoil programme but publishes no rates for
-          either, so assume you are paying for tow-ins on top. The enquiry above asks for both in
-          writing — get the number before anyone budgets around it.
+          Lunch, dinner and anything on the water is on top of the room rate.
+        </p>
+      </section>
+
+      {/* The single most consequential fact for a foiling trip, and it is buried
+          on the hotel's own service page. */}
+      <section className="mt-14">
+        <p className="marker mb-3">Tow-ins — read this properly</p>
+        <div className="card border-l-2 border-l-rust p-5 mb-5">
+          <p className="font-semibold mb-1.5">Foilers cannot use the cheap boat.</p>
+          <p className="text-sm text-slate2">
+            The hotel&rsquo;s own words: <em>&ldquo;for safety reasons we will not offer this
+            service for Foilers, this service will only be for surfers&rdquo;</em>. The shared boat
+            at $30 a head is for surfers. Foilers are on the private boat, and it takes two of us at
+            a time.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto card">
+          <table className="w-full text-sm border-collapse min-w-[34rem]">
+            <thead>
+              <tr className="border-b border-hairline">
+                {['', 'Shared boat', 'Private boat'].map((h) => (
+                  <th key={h} className="th px-4 py-3">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Foilers allowed', 'No', 'Yes — towed into waves'],
+                ['Low season (Nov, Dec)', '$30 per person', '$200 per session'],
+                ['High season (Mar–Jul, Sep, Oct)', '$35 per person', '$250 per session'],
+                ['Capacity', '8 surfers, min 2 to launch', '5 surfers or 2 foilers'],
+                ['Session length', '3 h morning, 2¼ h afternoon', 'Up to 3 h, 07:00–17:30'],
+                ['Booking', 'At the desk', 'At least 24 h ahead'],
+              ].map(([what, shared, priv], i) => (
+                <tr key={i} className="border-b border-hairline last:border-0">
+                  <td className="px-4 py-3 font-medium">{what}</td>
+                  <td className={'px-4 py-3 ' + (i === 0 ? 'text-rust' : 'mono')}>{shared}</td>
+                  <td className={'px-4 py-3 ' + (i === 0 ? 'text-sea' : 'mono')}>{priv}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-sm text-slate2 mt-4 max-w-2xl">
+          Our window is the boat&rsquo;s <strong className="text-ink">low season</strong>, so $200 a
+          session rather than $250 — about <strong className="text-ink">$100 each</strong> with two
+          foilers aboard. The open question is how many boats they actually run: twelve foilers
+          wanting one session a day is six boat sessions a day, and the private boat only operates
+          07:00 to 17:30. That is the thing to pin down in the quote.
         </p>
       </section>
 

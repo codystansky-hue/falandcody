@@ -29,10 +29,27 @@ export const TRIP = {
       { key: 'ocean', label: 'Standard Ocean View', count: 10, fromUsd: 160 },
       { key: 'premium', label: 'Premium (A/C, bay view)', count: 3, fromUsd: 180 },
     ],
-    // The hotel advertises a tow-back boat and a hydrofoil programme but
-    // publishes no prices for either, so nothing here assumes they are
-    // included. The group enquiry on /hotel asks for both in writing.
-    towBack: { offered: true, includedInRoomRate: false, priceKnown: false },
+    // Tow-back, from the hotel's own service page. The important line for a
+    // foiling trip: the cheap shared boat explicitly excludes foilers — "for
+    // safety reasons we will not offer this service for Foilers, this service
+    // will only be for surfers". Foilers are on the private boat only, two at
+    // a time. November and December are its low season, which is the window.
+    towBack: {
+      includedInRoomRate: false,
+      shared: { lowUsd: 30, highUsd: 35, maxSurfers: 8, foilersAllowed: false },
+      private: {
+        lowUsd: 200,
+        highUsd: 250,
+        maxSurfers: 5,
+        maxFoilers: 2,
+        foilersAllowed: true,
+        maxHours: 3,
+        noticeHours: 24,
+      },
+      // Low season for the boat is Jan, Feb, Aug, Nov, Dec.
+      lowSeasonMonths: [1, 2, 8, 11, 12],
+      hours: 'Shared 8:30–11:30 and 15:30–17:45 · Private 07:00–17:30',
+    },
     transferFrom: 'TRU',
     transferKm: 85,
     transferHours: 1.5,

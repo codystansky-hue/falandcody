@@ -13,6 +13,7 @@ type Person = {
   needs_transfer: boolean
   flight_cost_usd: number | string | null
   flight_estimate_usd?: number | null
+  foil_level?: string | null
   paid_status: string
 }
 
@@ -78,6 +79,7 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
   })
 
   const num = (v: string) => (v === '' ? 0 : Math.max(0, Number(v) || 0))
+  const foilers = people.filter((p) => p.foil_level !== 'never').length
 
   return (
     <>
@@ -165,7 +167,36 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                 onChange={(e) => set('rentalPerDayUsd', num(e.target.value))}
               />
             </Row>
-            <Row label="Tow-ins, tips, kitty" hint="Tow-back price is NOT published — assumption only">
+            <Row label="Tow-in sessions each" hint="Across the whole week">
+              <input
+                type="number"
+                min={0}
+                max={21}
+                className="field mono w-20 text-right"
+                value={a.towSessions}
+                onChange={(e) => set('towSessions', num(e.target.value))}
+              />
+            </Row>
+            <Row label="Private boat, per session" hint="$200 low season, $250 high. Foilers cannot use the shared boat">
+              <input
+                type="number"
+                min={0}
+                className="field mono w-24 text-right"
+                value={a.towSessionUsd}
+                onChange={(e) => set('towSessionUsd', num(e.target.value))}
+              />
+            </Row>
+            <Row label="Foilers per boat" hint="The hotel's limit is 2">
+              <input
+                type="number"
+                min={1}
+                max={5}
+                className="field mono w-20 text-right"
+                value={a.foilersPerBoat}
+                onChange={(e) => set('foilersPerBoat', Math.max(1, num(e.target.value)))}
+              />
+            </Row>
+            <Row label="Tips and incidentals">
               <input
                 type="number"
                 min={0}
@@ -218,6 +249,26 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
           </section>
 
           <section>
+            <p className="marker mb-3">Boat time is the real constraint</p>
+            <div className="card border-l-2 border-l-rust p-5 mb-8 text-sm">
+              <p className="mb-2">
+                Foilers are barred from the cheap shared boat — the hotel says so outright, for
+                safety. The private boat is the only option and it takes{' '}
+                <span className="mono">{a.foilersPerBoat}</span> foilers at a time, three hours a
+                session, booked 24 hours ahead.
+              </p>
+              <p className="text-slate2">
+                {foilers} of you want tow-ins. At {a.towSessions} sessions each that is{' '}
+                <span className="mono text-ink">
+                  {Math.ceil((foilers * a.towSessions) / Math.max(1, a.foilersPerBoat))} boat
+                  sessions
+                </span>{' '}
+                across the week, {usd(foilers * a.towSessions * a.towSessionUsd / Math.max(1, a.foilersPerBoat))}{' '}
+                in total. Ask the hotel how many boats they actually run before assuming everyone
+                gets on the water.
+              </p>
+            </div>
+
             <p className="marker mb-3">Per person</p>
             {people.length === 0 ? (
               <p className="card p-5 text-sm text-slate2">
@@ -248,7 +299,8 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                           ['Transfer', usd(c.transfer)],
                           ['Food', usd(c.food)],
                           ['Gear hire', c.rental ? usd(c.rental) : '—'],
-                          ['Extras', usd(c.extras)],
+                          ['Tow-ins', c.tow ? usd(c.tow) : '—'],
+                          ['Tips etc', usd(c.extras)],
                         ].map(([k, v]) => (
                           <div key={k} className="flex justify-between">
                             <dt className="text-slate2">{k}</dt>
@@ -277,7 +329,7 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                   <table className="w-full text-sm border-collapse min-w-[42rem]">
                     <thead>
                       <tr className="border-b border-hairline">
-                        {['Who', 'Room', 'Transfer', 'Food', 'Hire', 'Extras', 'Ground', 'Flight', 'Total'].map(
+                        {['Who', 'Room', 'Transfer', 'Food', 'Hire', 'Tow-ins', 'Tips', 'Ground', 'Flight', 'Total'].map(
                           (h) => (
                             <th key={h} className="th px-3 py-3">
                               {h}
@@ -299,6 +351,7 @@ export default function BudgetCalculator({ people }: { people: Person[] }) {
                           <td className="px-3 py-2.5 mono">{usd(c.transfer)}</td>
                           <td className="px-3 py-2.5 mono">{usd(c.food)}</td>
                           <td className="px-3 py-2.5 mono">{c.rental ? usd(c.rental) : '—'}</td>
+                          <td className="px-3 py-2.5 mono">{c.tow ? usd(c.tow) : '—'}</td>
                           <td className="px-3 py-2.5 mono">{usd(c.extras)}</td>
                           <td className="px-3 py-2.5 mono font-medium">{usd(c.onTheGround)}</td>
                           <td className="px-3 py-2.5 mono whitespace-nowrap">

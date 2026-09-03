@@ -26,6 +26,7 @@ export default async function BudgetPage() {
       room_pref: a.room_pref,
       bringing_gear: a.bringing_gear,
       needs_transfer: a.needs_transfer,
+      foil_level: a.foil_level,
       flight_cost_usd: a.flight_cost_usd,
       paid_status: a.paid_status,
       flight_estimate_usd: a.origin_airport

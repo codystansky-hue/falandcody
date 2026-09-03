@@ -47,7 +47,12 @@ export default function GroupEnquiry({
     `4. What is the payment schedule and the deposit deadline?`,
     `5. Airport transfers from Trujillo (TRU) for ${shuttle || headcount} people — cost, and can`,
     `   you group us into shared vans by arrival time?`,
-    `6. Hydrofoil equipment hire and tow-back service — availability and daily rates.`,
+    `6. Tow-ins. We are a foiling group, so we understand the shared boat is not`,
+    `   available to us and we would be booking the private boat at the low-season`,
+    `   rate. How many private boats do you run, and how many sessions per day can`,
+    `   you realistically hold for a group our size? Two foilers per boat means we`,
+    `   need several sessions a day.`,
+    `7. Hydrofoil equipment hire — availability and daily rates.`,
     ...(roomLines.length ? [``, `Room preferences so far:`, ...roomLines] : []),
     ...(rentals.length
       ? [``, `Gear we expect to hire:`, ...rentals.map((r) => `  - ${r}`)]
