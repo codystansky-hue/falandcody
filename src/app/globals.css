@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Chicama sits where the Atacama meets the Humboldt current: blinding desert
+  light, bone-dry ochre cliffs, and water that is cold grey-green rather than
+  tropical blue. The palette is taken from that, not from surf-poster blue.
+*/
+:root {
+  --bone: #e6e2d6;
+  --bone-2: #dcd7c8;
+  --foam: #fbfaf5;
+  --ink: #0e2b29;
+  --sea: #16413e;
+  --slate: #4f6462;
+  --ochre: #b8813c;
+  --rust: #a83a22;
+  --line: rgba(14, 43, 41, 0.16);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bone);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--ochre);
+  color: var(--foam);
+}
+
+/* One visible focus treatment everywhere, including keyboard-only. */
+:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.92;
+  }
+
+  .mono {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Distance markers down the point. Chicama's sections really are measured in
+     metres from the headland, so the eyebrow carries information. */
+  .marker {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--slate);
+  }
+
+  .card {
+    background: var(--foam);
+    border: 1px solid var(--line);
+  }
+
+  .field {
+    width: 100%;
+    background: var(--foam);
+    border: 1px solid var(--line);
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9375rem;
+    color: var(--ink);
+  }
+  .field::placeholder {
+    color: rgba(79, 100, 98, 0.65);
+  }
+  .field:focus {
+    border-color: var(--ochre);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: var(--ink);
+    color: var(--foam);
+    padding: 0.7rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    transition: background 140ms ease;
+  }
+  .btn:hover {
+    background: var(--sea);
+  }
+  .btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-quiet {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-quiet:hover {
+    background: var(--bone-2);
+  }
+
+  .label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--slate);
+    margin-bottom: 0.35rem;
+  }
+}
+
+/* The wave draws itself once on load. Everything else on the page holds still. */
+@keyframes peel {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Riders surface behind the crest as it draws past them. */
+@keyframes riderIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
