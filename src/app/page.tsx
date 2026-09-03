@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import PointBreak, { type Rider } from '@/components/PointBreak'
 import CaptainAvatar from '@/components/CaptainAvatar'
+import SwellMap from '@/components/SwellMap'
 import { Notice, Stat } from '@/components/ui'
 import { TRIP } from '@/lib/config'
 import { listAttendees } from '@/lib/attendees'
@@ -135,6 +136,14 @@ export default async function Home() {
             <p>Open-Meteo did not answer. It needs no key, so this is temporary — reload shortly.</p>
           </Notice>
         )}
+      </section>
+
+      <section className="mt-16 md:mt-24">
+        <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+          <p className="marker">Where the swell is</p>
+          <p className="marker">8°04′S 79°26′W</p>
+        </div>
+        <SwellMap />
       </section>
 
       <section className="mt-16 md:mt-24 grid gap-6 md:grid-cols-2">

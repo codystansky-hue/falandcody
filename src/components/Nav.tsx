@@ -10,6 +10,8 @@ const LINKS = [
   { href: '/dates', label: 'Dates' },
   { href: '/swell', label: 'Swell' },
   { href: '/flights', label: 'Flights' },
+  { href: '/hotel', label: 'Hotel' },
+  { href: '/budget', label: 'Budget' },
   { href: '/arrivals', label: 'Arrivals' },
   { href: '/connect', label: 'Use Claude' },
 ]

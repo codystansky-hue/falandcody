@@ -26,6 +26,7 @@ export type Attendee = {
   passport_expiry: string | null
   emergency_contact: string | null
   paid_status: string
+  flight_cost_usd: number | string | null
   status: string
   notes: string | null
   created_at: string

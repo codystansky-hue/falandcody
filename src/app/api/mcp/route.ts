@@ -6,6 +6,8 @@ import { CLIMATE_SOURCE, SEASON, WINDOW_BLOCKS, wetsuitFor } from '@/lib/season'
 import { PROPOSED_WEEKS, tallyWeeks, VOTES, weekByKey } from '@/lib/weeks'
 import { routeOptions } from '@/lib/flightSearch'
 import { isDbReady } from '@/lib/db'
+import { DEFAULTS, IGV_RATE, costFor, usd } from '@/lib/costs'
+import { HOTEL } from '@/lib/hotel'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,9 +18,9 @@ export const dynamic = 'force-dynamic'
 //   "add me to the Chicama trip, I'm flying out of Denver, second week works"
 //
 // Deliberately hand-rolled JSON-RPC rather than pulling in the SDK: the whole
-// surface is nine tools with no sessions, no server-initiated messages and no
-// streaming, and that is about 100 lines of dispatch. Stateless, so it survives
-// serverless cold starts without any session store.
+// surface is a handful of tools with no sessions, no server-initiated messages
+// and no streaming, which is about 100 lines of dispatch. Stateless, so it
+// survives serverless cold starts without any session store.
 //
 // Auth is the same shared passphrase as the website, passed either as
 // `Authorization: Bearer <passphrase>` or `?key=<passphrase>`. middleware.ts
@@ -106,6 +108,28 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'trip_budget',
+    description:
+      'What the trip costs per person and for the group, broken down by room, transfer, food, gear hire and flights. Assumptions can be overridden. Use for any "how much will this cost" question.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        occupancy: { type: 'number', description: 'People per room, 1-3. Default 2.' },
+        nights: { type: 'number', description: 'Default 7.' },
+        paying_igv: {
+          type: 'boolean',
+          description: 'Model the 18% Peruvian sales tax. Default false, because foreign tourists staying under 60 days are exempt.',
+        },
+      },
+    },
+  },
+  {
+    name: 'how_to_book_the_hotel',
+    description:
+      'How the group books Chicama Boutique Hotel, the contact channels, and the reservation terms. Read this before telling anyone to book a room — individual bookings are the wrong move for this trip.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'join_trip',
     description:
       'Add yourself to the trip, or update your details. Returns an edit_token — KEEP IT and pass it back on every later call, otherwise you will create a duplicate person. Only `name` is required; everything else can be filled in later.',
@@ -147,6 +171,10 @@ const TOOLS = [
           description: 'YYYY-MM-DD. Peru requires six months validity past entry.',
         },
         emergency_contact: { type: 'string' },
+        flight_cost_usd: {
+          type: 'number',
+          description: 'What their flight actually cost, once booked. Feeds the budget.',
+        },
         notes: { type: 'string' },
         week_votes: {
           type: 'object',
@@ -328,6 +356,92 @@ async function callTool(name: string, args: Json) {
         without_flights: crew
           .filter((a) => a.status !== 'out' && !a.arrival_at)
           .map((a) => a.nickname || a.name),
+      })
+    }
+
+    case 'trip_budget': {
+      const crew = (await listAttendees()).filter((a) => a.status !== 'out')
+      const a = {
+        ...DEFAULTS,
+        occupancy: Math.min(3, Math.max(1, Number(args.occupancy) || DEFAULTS.occupancy)),
+        nights: Math.min(30, Math.max(1, Number(args.nights) || DEFAULTS.nights)),
+        payingIgv: args.paying_igv === true,
+      }
+      const costs = crew.map((p) =>
+        costFor(
+          {
+            name: p.nickname || p.name,
+            room_pref: p.room_pref,
+            bringing_gear: p.bringing_gear,
+            needs_transfer: p.needs_transfer,
+            flight_cost_usd: p.flight_cost_usd,
+            paid_status: p.paid_status,
+          },
+          a,
+        ),
+      )
+      const ground = costs.reduce((sum, c) => sum + c.onTheGround, 0)
+      return text({
+        caveat:
+          'These are assumptions, not quotes. The hotel prices by date and the published rates are "from" prices. Get a real group quote before anyone budgets seriously.',
+        assumptions: {
+          nights: a.nights,
+          people_per_room: a.occupancy,
+          room_rates_per_room_per_night: a.roomRates,
+          transfer_round_trip: a.transferUsd,
+          food_per_day: a.foodPerDayUsd,
+          gear_hire_per_day: a.rentalPerDayUsd,
+          extras: a.extrasUsd,
+          paying_igv: a.payingIgv,
+        },
+        per_person_on_the_ground: crew.length ? usd(ground / crew.length) : usd(0),
+        group_on_the_ground: usd(ground),
+        flights_booked_so_far: usd(costs.reduce((s2, c) => s2 + (c.flight ?? 0), 0)),
+        people: costs.map((c) => ({
+          name: c.name,
+          room: usd(c.room),
+          transfer: usd(c.transfer),
+          food: usd(c.food),
+          gear_hire: c.rental ? usd(c.rental) : null,
+          extras: usd(c.extras),
+          on_the_ground: usd(c.onTheGround),
+          flight: c.flight == null ? 'not booked' : usd(c.flight),
+          total: c.total == null ? null : usd(c.total),
+          paid: c.paid,
+        })),
+        biggest_lever:
+          'Occupancy. Call this again with occupancy 3 to see what sharing saves — the hotel has triple rooms.',
+        tax_note: `Peru zero-rates its ${Math.round(IGV_RATE * 100)}% IGV on lodging and food for non-resident foreigners staying under 60 days, but you need the passport entry stamp or the digital TAM record from the Migraciones portal. Worth 18% of the largest line here.`,
+      })
+    }
+
+    case 'how_to_book_the_hotel': {
+      const crew = (await listAttendees()).filter((a) => a.status !== 'out')
+      return text({
+        headline:
+          'Do not book individually. The hotel handles groups through a separate reservations channel with its own payments schedule; twelve separate online bookings means no group rate, no guarantee the rooms are together, and a real risk the last few sell out.',
+        how: `One person emails ${HOTEL.groupEmail}, gets a written quote and a payment schedule, and everyone settles with them. The site has a prefilled draft at /hotel.`,
+        contacts: {
+          group_reservations_email: HOTEL.groupEmail,
+          whatsapp: HOTEL.whatsapp,
+          phones: HOTEL.phones,
+          online_engine: `${HOTEL.bookingEngine} (individuals only)`,
+        },
+        ask_for: [
+          'A group rate and a held block of rooms',
+          'Triple rooms — the biggest single lever on cost per head',
+          'The IGV exemption applied to the quote',
+          'The payment schedule and deposit deadline in writing',
+          `Shared airport transfers from TRU for ${crew.filter((a) => a.needs_transfer).length || crew.length} people, grouped by arrival time`,
+          'Hydrofoil hire and tow-back rates',
+        ],
+        terms: [
+          'Group bookings get a payments schedule rather than a single charge',
+          'One postponement allowed within the year the booking was made',
+          'Refund fees around US$40 abroad / US$25 within Peru, deducted from prepayments',
+          'Rates quoted in USD and may move with the exchange rate or season — get the quote dated',
+        ],
+        rooms_available: TRIP.venue.rooms,
       })
     }
 

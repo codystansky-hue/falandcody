@@ -101,6 +101,7 @@ export default function AttendeeForm({
     passport_expiry: attendee?.passport_expiry?.slice(0, 10) ?? '',
     emergency_contact: attendee?.emergency_contact ?? '',
     notes: attendee?.notes ?? '',
+    flight_cost_usd: attendee?.flight_cost_usd?.toString() ?? '',
   })
 
   const [weekVotes, setWeekVotes] = useState<Record<string, Vote>>(() =>
@@ -269,6 +270,21 @@ export default function AttendeeForm({
             value={draft.departure_at as string}
             onChange={(e) => set('departure_at', e.target.value)}
           />
+        </Field>
+        <Field name="flight_cost_usd" label="What the flight cost (USD)" span>
+          <input
+            id="flight_cost_usd"
+            type="number"
+            min={0}
+            className="field mono"
+            placeholder="890"
+            value={draft.flight_cost_usd as string}
+            onChange={(e) => set('flight_cost_usd', e.target.value)}
+          />
+          <p className="text-xs text-slate2 mt-1.5">
+            Only once you have actually booked. It feeds the budget so everyone can see the real
+            number rather than an estimate.
+          </p>
         </Field>
         <div className="sm:col-span-2">
           <label className="flex items-start gap-2.5 text-sm cursor-pointer">

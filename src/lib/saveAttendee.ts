@@ -32,6 +32,12 @@ export const toPeruIso = (v: unknown) => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
+const money = (v: unknown) => {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 && n < 1_000_000 ? n : null
+}
+
 const dateOnly = (v: unknown) => {
   const s = str(v, 12)
   return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
@@ -77,6 +83,9 @@ export async function saveAttendee(body: Record<string, unknown>): Promise<SaveR
     emergency_contact: str(body.emergency_contact, 200),
     status: oneOf(body.status, STATUS_KEYS, 'in'),
     notes: str(body.notes, 1000),
+    // Null rather than 0 when absent, so "not booked yet" stays distinguishable
+    // from "the flight was free".
+    flight_cost_usd: money(body.flight_cost_usd),
   }
 
   const sql = db()
@@ -97,7 +106,8 @@ export async function saveAttendee(body: Record<string, unknown>): Promise<SaveR
         rental_needed = ${f.rental_needed}, wetsuit_size = ${f.wetsuit_size},
         shirt_size = ${f.shirt_size}, dietary = ${f.dietary},
         passport_expiry = ${f.passport_expiry}, emergency_contact = ${f.emergency_contact},
-        status = ${f.status}, notes = ${f.notes}, updated_at = now()
+        status = ${f.status}, notes = ${f.notes},
+        flight_cost_usd = ${f.flight_cost_usd}, updated_at = now()
       where id = ${existing.id}
       returning id, edit_token
     `) as SaveResult[]
@@ -109,7 +119,8 @@ export async function saveAttendee(body: Record<string, unknown>): Promise<SaveR
         edit_token, name, nickname, email, phone, origin_city, origin_airport,
         arrival_flight, arrival_at, departure_flight, departure_at, needs_transfer,
         room_pref, roommate_pref, foil_level, bringing_gear, rental_needed,
-        wetsuit_size, shirt_size, dietary, passport_expiry, emergency_contact, status, notes
+        wetsuit_size, shirt_size, dietary, passport_expiry, emergency_contact, status, notes,
+        flight_cost_usd
       ) values (
         ${fresh}, ${f.name}, ${f.nickname}, ${f.email}, ${f.phone},
         ${f.origin_city}, ${f.origin_airport}, ${f.arrival_flight},
@@ -117,7 +128,8 @@ export async function saveAttendee(body: Record<string, unknown>): Promise<SaveR
         ${f.needs_transfer}, ${f.room_pref}, ${f.roommate_pref},
         ${f.foil_level}, ${f.bringing_gear}::jsonb, ${f.rental_needed},
         ${f.wetsuit_size}, ${f.shirt_size}, ${f.dietary},
-        ${f.passport_expiry}, ${f.emergency_contact}, ${f.status}, ${f.notes}
+        ${f.passport_expiry}, ${f.emergency_contact}, ${f.status}, ${f.notes},
+        ${f.flight_cost_usd}
       )
       returning id, edit_token
     `) as SaveResult[]

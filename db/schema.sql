@@ -77,3 +77,7 @@ create table if not exists date_votes (
 );
 
 create index if not exists date_votes_week_idx on date_votes (week_key);
+
+-- What each person actually paid for flights, so the budget reflects reality
+-- rather than an estimate once people start booking.
+alter table attendees add column if not exists flight_cost_usd numeric;
