@@ -1,142 +1,146 @@
 import Link from 'next/link'
 import { Notice, Page } from '@/components/ui'
-import { listAttendees, listWindows } from '@/lib/attendees'
+import { listAttendees, listVotes, listWindows } from '@/lib/attendees'
 import { TRIP } from '@/lib/config'
+import { tallyWeeks } from '@/lib/weeks'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Dates — Chicama' }
 
-const DAY_MS = 86_400_000
-
-// Weeks running Saturday to Saturday, because that is how the hotel sells them
-// and how everyone books flights.
-function weeksIn(startISO: string, endISO: string) {
-  const weeks: { start: Date; end: Date }[] = []
-  const cursor = new Date(startISO + 'T12:00:00Z')
-  while (cursor.getUTCDay() !== 6) cursor.setUTCDate(cursor.getUTCDate() + 1)
-  const last = new Date(endISO + 'T12:00:00Z')
-  while (cursor <= last) {
-    const start = new Date(cursor)
-    const end = new Date(cursor.getTime() + 7 * DAY_MS)
-    weeks.push({ start, end })
-    cursor.setUTCDate(cursor.getUTCDate() + 7)
-  }
-  return weeks
-}
-
-// October and November carry the window's best conditions — see src/lib/season.ts.
-// October has the highest share of standout days in the record; November is the
-// driest and quietest. Zero-indexed to match getUTCMonth().
-const PRIME_MONTHS = [9, 10]
+const fmt = (iso: string) =>
+  new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
 
 export default async function DatesPage() {
-  const [attendees, windows] = await Promise.all([listAttendees(), listWindows()])
+  const [attendees, votes, windows] = await Promise.all([
+    listAttendees(),
+    listVotes(),
+    listWindows(),
+  ])
+
   const going = attendees.filter((a) => a.status !== 'out')
-  const weeks = weeksIn(TRIP.window.start, TRIP.window.end)
-
-  const byAttendee = new Map<number, { start: number; end: number }[]>()
-  for (const w of windows) {
-    const list = byAttendee.get(w.attendee_id) ?? []
-    list.push({
-      start: new Date(w.window_start).getTime(),
-      end: new Date(w.window_end).getTime(),
-    })
-    byAttendee.set(w.attendee_id, list)
+  const ranked = tallyWeeks(votes)
+  const voted = new Set(votes.map((v) => v.attendee_id))
+  const notVoted = going.filter((a) => !voted.has(a.id))
+  const anyVotes = votes.length > 0
+  const nameOf = (id: number) => {
+    const a = attendees.find((x) => x.id === id)
+    return a ? a.nickname || a.name : 'someone'
   }
-
-  const free = (attendeeId: number, week: { start: Date; end: Date }) =>
-    (byAttendee.get(attendeeId) ?? []).some(
-      (w) => w.start <= week.start.getTime() && w.end >= week.end.getTime() - DAY_MS,
-    )
-
-  const counts = weeks.map((week) => going.filter((a) => free(a.id, week)).length)
-  const best = Math.max(0, ...counts)
-  const withWindows = going.filter((a) => (byAttendee.get(a.id) ?? []).length > 0)
 
   return (
     <Page
       marker={`Window · ${TRIP.window.label}`}
       title="Dates"
-      lede="Every week in the window, and how many of the crew can actually make it. A tall bar in October or November is the one to book — those two months carry the best conditions of the window."
+      lede="Three weeks, picked on five years of conditions at the point. Say yes to every one you could make — most yeses wins, and a maybe counts half."
     >
-      {withWindows.length === 0 ? (
-        <Notice title="Nobody has said when they can get away">
-          <p>
-            The overlap grid fills in as people add their weeks at the bottom of their own page.
-          </p>
-          <p>
-            <Link href="/me" className="underline underline-offset-2 text-ink">
-              Add your weeks
-            </Link>
-          </p>
-        </Notice>
-      ) : (
-        <>
-          <div className="card p-5 overflow-x-auto">
-            <div className="flex items-end gap-[3px] h-48 min-w-[48rem]">
-              {weeks.map((week, i) => {
-                const count = counts[i]
-                const isBest = count > 0 && count === best
-                const prime = PRIME_MONTHS.includes(week.start.getUTCMonth())
-                return (
-                  <div key={i} className="flex-1 h-full flex flex-col justify-end items-center gap-1">
-                    <span className="mono text-[0.6rem] text-slate2">{count || ''}</span>
-                    <div
-                      className="w-full transition-all"
-                      style={{
-                        height: `${going.length ? (count / going.length) * 100 : 0}%`,
-                        minHeight: count ? 3 : 0,
-                        background: isBest ? 'var(--ochre)' : 'var(--sea)',
-                        opacity: isBest ? 1 : prime ? 0.5 : 0.28,
-                      }}
-                      title={`${week.start.toISOString().slice(0, 10)} — ${count} of ${going.length}`}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex gap-[3px] mt-2 min-w-[48rem]">
-              {weeks.map((week, i) => (
-                <div key={i} className="flex-1 text-center">
-                  <span className="mono text-[0.55rem] text-slate2">
-                    {week.start.getUTCDate() <= 7
-                      ? week.start.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })
-                      : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-slate2 mt-4">
-              Ochre is the best-covered week. The half-lit bars are October and November, which
-              carry the window&rsquo;s best conditions — a week there is worth one fewer person.
-            </p>
-          </div>
+      <div className="space-y-4">
+        {ranked.map((week, i) => {
+          const leading = i === 0 && anyVotes && week.points > 0
+          const notSaid = going.length - week.yes - week.maybe - week.no
+          return (
+            <section
+              key={week.key}
+              className={'card p-5 md:p-6 ' + (leading ? 'border-l-2 border-l-ochre' : '')}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h2 className="display text-2xl">{week.label}</h2>
+                {leading && <span className="marker text-ochre">Leading</span>}
+              </div>
+              <p className="mono text-xs text-slate2 mt-1">
+                {fmt(week.start)} → {fmt(week.end)}
+              </p>
+              <p className="text-slate2 mt-3 max-w-2xl">{week.pitch}</p>
 
-          <section className="mt-10">
-            <p className="marker mb-4">Who said what</p>
-            <ul className="divide-y divide-hairline border-t border-hairline">
-              {going.map((person) => {
-                const list = byAttendee.get(person.id) ?? []
-                return (
-                  <li key={person.id} className="py-3 flex flex-wrap gap-x-4 gap-y-1 justify-between">
-                    <span className="font-medium">{person.nickname || person.name}</span>
-                    <span className="mono text-sm text-slate2">
-                      {list.length === 0
-                        ? 'Has not said'
-                        : list
-                            .map(
-                              (w) =>
-                                `${new Date(w.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} – ${new Date(w.end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`,
-                            )
-                            .join('  ·  ')}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        </>
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-sm">
+                <div>
+                  <dt className="label mb-0.5">Good days</dt>
+                  <dd className="mono text-lg">{week.good}%</dd>
+                </div>
+                <div>
+                  <dt className="label mb-0.5">Firing</dt>
+                  <dd className="mono text-lg">{week.firing}%</dd>
+                </div>
+                <div>
+                  <dt className="label mb-0.5">Mean swell</dt>
+                  <dd className="mono text-lg">{week.swellFt.toFixed(1)} ft</dd>
+                </div>
+                <div>
+                  <dt className="label mb-0.5">Mean period</dt>
+                  <dd className="mono text-lg">{week.periodS.toFixed(1)} s</dd>
+                </div>
+              </dl>
+
+              <div className="mt-5 pt-4 border-t border-hairline">
+                {going.length === 0 ? (
+                  <p className="text-sm text-slate2">No votes yet.</p>
+                ) : (
+                  <>
+                    <div className="flex h-2 w-full overflow-hidden bg-bone2" aria-hidden>
+                      <span
+                        style={{ width: `${(week.yes / going.length) * 100}%`, background: 'var(--ink)' }}
+                      />
+                      <span
+                        style={{ width: `${(week.maybe / going.length) * 100}%`, background: 'var(--ochre)' }}
+                      />
+                      <span
+                        style={{
+                          width: `${(week.no / going.length) * 100}%`,
+                          background: 'var(--rust)',
+                          opacity: 0.4,
+                        }}
+                      />
+                    </div>
+                    <p className="mono text-xs text-slate2 mt-2">
+                      {week.yes} yes · {week.maybe} maybe · {week.no} no
+                      {notSaid > 0 && ` · ${notSaid} not said`}
+                    </p>
+                  </>
+                )}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+
+      {!anyVotes && (
+        <div className="mt-6">
+          <Notice title="Nobody has voted yet">
+            <p>Three buttons on your own page and you are done — it takes about ten seconds.</p>
+            <p>
+              <Link href="/me" className="underline underline-offset-2 text-ink">
+                Cast your vote
+              </Link>
+            </p>
+          </Notice>
+        </div>
+      )}
+
+      {notVoted.length > 0 && anyVotes && (
+        <p className="mt-6 text-sm text-slate2">
+          Still to vote: {notVoted.map((a) => a.nickname || a.name).join(', ')}.
+        </p>
+      )}
+
+      {windows.length > 0 && (
+        <section className="mt-14">
+          <p className="marker mb-4">Dates people suggested instead</p>
+          <ul className="text-sm divide-y divide-hairline border-t border-hairline">
+            {windows.map((w) => (
+              <li key={w.id} className="py-2.5 flex flex-wrap gap-x-4 justify-between">
+                <span className="font-medium">{nameOf(w.attendee_id)}</span>
+                <span className="mono text-slate2">
+                  {fmt(w.window_start.slice(0, 10))} – {fmt(w.window_end.slice(0, 10))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </Page>
   )

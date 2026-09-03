@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FOIL_LEVELS, GEAR_ITEMS, PASSPORT_MONTHS_REQUIRED, TRIP } from '@/lib/config'
-import type { Attendee, Window } from '@/lib/attendees'
+import type { Attendee, DateVote, Window } from '@/lib/attendees'
+import { PROPOSED_WEEKS, type Vote } from '@/lib/weeks'
 
 type Draft = Record<string, string | boolean | string[]>
 
@@ -65,9 +66,11 @@ function Field({
 export default function AttendeeForm({
   attendee,
   windows,
+  votes,
 }: {
   attendee: Attendee | null
   windows: Window[]
+  votes: DateVote[]
 }) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -99,6 +102,10 @@ export default function AttendeeForm({
     emergency_contact: attendee?.emergency_contact ?? '',
     notes: attendee?.notes ?? '',
   })
+
+  const [weekVotes, setWeekVotes] = useState<Record<string, Vote>>(() =>
+    Object.fromEntries(votes.map((v) => [v.week_key, v.vote as Vote])),
+  )
 
   const [ranges, setRanges] = useState<{ start: string; end: string }[]>(
     windows.length
@@ -137,6 +144,7 @@ export default function AttendeeForm({
         body: JSON.stringify({
           ...draft,
           edit_token: attendee?.edit_token,
+          week_votes: weekVotes,
           windows: ranges.filter((r) => r.start && r.end),
         }),
       })
@@ -423,62 +431,105 @@ export default function AttendeeForm({
       {!TRIP.window.locked && (
         <Fieldset
           n="Line-up"
-          title="When you can get away"
-          hint={`The window is ${TRIP.window.label}. Add every week that works and the overlap picks the dates.`}
+          title="Which weeks work?"
+          hint="Three proposed weeks, picked on five years of conditions data. Say yes to every one you could make — the most yeses wins."
         >
           <div className="sm:col-span-2 space-y-3">
-            {ranges.map((range, i) => (
-              <div key={i} className="flex flex-wrap items-end gap-3">
-                <div>
-                  <label className="label" htmlFor={`start-${i}`}>
-                    From
-                  </label>
-                  <input
-                    id={`start-${i}`}
-                    type="date"
-                    className="field mono w-auto"
-                    min={TRIP.window.start}
-                    max={TRIP.window.end}
-                    value={range.start}
-                    onChange={(e) =>
-                      setRanges((r) => r.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))
-                    }
-                  />
+            {PROPOSED_WEEKS.map((week) => (
+              <div key={week.key} className="border border-hairline p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-1">
+                  <span className="display text-lg">{week.label}</span>
+                  <span className="mono text-xs text-slate2">
+                    {week.good}% good days · {week.firing}% firing
+                  </span>
                 </div>
-                <div>
-                  <label className="label" htmlFor={`end-${i}`}>
-                    To
-                  </label>
-                  <input
-                    id={`end-${i}`}
-                    type="date"
-                    className="field mono w-auto"
-                    min={range.start || TRIP.window.start}
-                    max={TRIP.window.end}
-                    value={range.end}
-                    onChange={(e) =>
-                      setRanges((r) => r.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))
-                    }
-                  />
+                <p className="text-sm text-slate2 mb-3">{week.pitch}</p>
+                <div className="flex gap-2" role="group" aria-label={`Can you make ${week.label}?`}>
+                  {(['yes', 'maybe', 'no'] as Vote[]).map((option) => {
+                    const on = weekVotes[week.key] === option
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => {
+                          setWeekVotes((v) => ({ ...v, [week.key]: option }))
+                          setSaved(false)
+                        }}
+                        className={
+                          'px-4 py-1.5 text-sm border capitalize transition-colors ' +
+                          (on
+                            ? 'bg-ink text-foam border-ink'
+                            : 'bg-foam border-hairline hover:bg-bone2')
+                        }
+                      >
+                        {option}
+                      </button>
+                    )
+                  })}
                 </div>
-                {ranges.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-sm text-slate2 hover:text-rust underline underline-offset-2 pb-2.5"
-                    onClick={() => setRanges((r) => r.filter((_, j) => j !== i))}
-                  >
-                    Remove
-                  </button>
-                )}
               </div>
             ))}
-            <button
-              type="button"
-              className="btn btn-quiet"
-              onClick={() => setRanges((r) => [...r, { start: '', end: '' }])}
-            >
-              Add another week
-            </button>
+
+            <details className="border-t border-hairline pt-4">
+              <summary className="text-sm cursor-pointer text-slate2 hover:text-ink">
+                None of those work? Add your own dates
+              </summary>
+              <div className="space-y-3 mt-4">
+                {ranges.map((range, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-3">
+                    <div>
+                      <label className="label" htmlFor={`start-${i}`}>
+                        From
+                      </label>
+                      <input
+                        id={`start-${i}`}
+                        type="date"
+                        className="field mono w-auto"
+                        min={TRIP.window.start}
+                        max={TRIP.window.end}
+                        value={range.start}
+                        onChange={(e) =>
+                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor={`end-${i}`}>
+                        To
+                      </label>
+                      <input
+                        id={`end-${i}`}
+                        type="date"
+                        className="field mono w-auto"
+                        min={range.start || TRIP.window.start}
+                        max={TRIP.window.end}
+                        value={range.end}
+                        onChange={(e) =>
+                          setRanges((r) => r.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))
+                        }
+                      />
+                    </div>
+                    {ranges.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-sm text-slate2 hover:text-rust underline underline-offset-2 pb-2.5"
+                        onClick={() => setRanges((r) => r.filter((_, j) => j !== i))}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  onClick={() => setRanges((r) => [...r, { start: '', end: '' }])}
+                >
+                  Add another range
+                </button>
+              </div>
+            </details>
           </div>
         </Fieldset>
       )}

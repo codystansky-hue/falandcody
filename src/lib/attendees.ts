@@ -33,6 +33,7 @@ export type Attendee = {
 }
 
 export type Window = { id: number; attendee_id: number; window_start: string; window_end: string }
+export type DateVote = { attendee_id: number; week_key: string; vote: string }
 
 export async function listAttendees(): Promise<Attendee[]> {
   if (!isDbReady()) return []
@@ -98,4 +99,16 @@ export function groupShuttles(attendees: Attendee[], windowMinutes = 120) {
     }
   }
   return runs
+}
+
+export async function listVotes(): Promise<DateVote[]> {
+  if (!isDbReady()) return []
+  return (await db()`select attendee_id, week_key, vote from date_votes`) as DateVote[]
+}
+
+export async function votesFor(attendeeId: number): Promise<DateVote[]> {
+  if (!isDbReady()) return []
+  return (await db()`
+    select attendee_id, week_key, vote from date_votes where attendee_id = ${attendeeId}
+  `) as DateVote[]
 }

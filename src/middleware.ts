@@ -3,7 +3,12 @@ import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from '@/lib/auth'
 
 // Everything is behind the gate except the gate itself and the assets needed to
 // draw it. /admin needs a second, separate passphrase on top.
-const PUBLIC_PATHS = ['/gate', '/api/gate']
+//
+// /api/mcp is exempt from the *cookie* gate, not from auth: MCP clients cannot
+// do the browser cookie dance, so that route checks the same passphrase itself
+// as a Bearer token or ?key=. /connect is the page explaining how to point an
+// agent at it, and gives nothing away on its own.
+const PUBLIC_PATHS = ['/gate', '/api/gate', '/api/mcp']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

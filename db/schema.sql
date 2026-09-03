@@ -64,3 +64,16 @@ create table if not exists swell_snapshots (
   score         numeric,
   fetched_at    timestamptz not null default now()
 );
+
+-- Votes on the proposed weeks in src/lib/weeks.ts. One row per person per week,
+-- so a change of mind updates rather than stacks.
+create table if not exists date_votes (
+  id          serial primary key,
+  attendee_id integer     not null references attendees(id) on delete cascade,
+  week_key    text        not null,
+  vote        text        not null,
+  created_at  timestamptz not null default now(),
+  unique (attendee_id, week_key)
+);
+
+create index if not exists date_votes_week_idx on date_votes (week_key);

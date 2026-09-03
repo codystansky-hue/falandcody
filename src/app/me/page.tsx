@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import AttendeeForm from '@/components/AttendeeForm'
 import { Notice, Page } from '@/components/ui'
-import { getByToken, windowsFor } from '@/lib/attendees'
+import { getByToken, votesFor, windowsFor } from '@/lib/attendees'
 import { isDbReady } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +22,7 @@ export default async function MePage({
 
   const attendee = token ? await getByToken(token) : null
   const windows = attendee ? await windowsFor(attendee.id) : []
+  const votes = attendee ? await votesFor(attendee.id) : []
 
   if (!isDbReady()) {
     return (
@@ -46,7 +47,7 @@ export default async function MePage({
           : 'One pass down the point. Only your name is required — flights and sizes can come later.'
       }
     >
-      <AttendeeForm attendee={attendee} windows={windows} />
+      <AttendeeForm attendee={attendee} windows={windows} votes={votes} />
 
       {attendee && (
         <p className="mt-8 text-sm text-slate2">

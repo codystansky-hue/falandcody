@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import PointBreak, { type Rider } from '@/components/PointBreak'
+import CaptainAvatar from '@/components/CaptainAvatar'
 import { Notice, Stat } from '@/components/ui'
 import { TRIP } from '@/lib/config'
 import { listAttendees } from '@/lib/attendees'
@@ -41,7 +42,7 @@ export default async function Home() {
 
   return (
     <div className="max-w-page mx-auto px-6">
-      <section className="pt-14 md:pt-20">
+      <section className="pt-14 md:pt-20 relative pb-28 sm:pb-32">
         <p className="marker mb-4">
           8°04′S 79°26′W · {TRIP.venue.town} · {TRIP.window.label}
         </p>
@@ -62,6 +63,11 @@ export default async function Home() {
             See who&rsquo;s in
           </Link>
         </div>
+
+        {/* Captain, ported from the portfolio site. He patrols the sand under
+            the hero — walks to your cursor, sits when you stop, flops if you
+            leave him alone, hops when clicked. */}
+        <CaptainAvatar />
       </section>
 
       {/* The crew, spread down the point in the order they land. */}

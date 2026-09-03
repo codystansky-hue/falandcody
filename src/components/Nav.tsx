@@ -11,6 +11,7 @@ const LINKS = [
   { href: '/swell', label: 'Swell' },
   { href: '/flights', label: 'Flights' },
   { href: '/arrivals', label: 'Arrivals' },
+  { href: '/connect', label: 'Use Claude' },
 ]
 
 export default function Nav() {
