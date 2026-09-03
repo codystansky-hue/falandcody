@@ -4,14 +4,19 @@
 export const TRIP = {
   name: 'Chicama',
   subtitle: 'the longest left on earth',
-  // Narrowed to the back end of the season on 2026-09-03. See src/lib/season.ts
-  // for the reanalysis behind it: October carries the highest share of standout
-  // days of any month in the record, November is nearly as good and the driest
-  // and quietest, and December falls away sharply after the 10th.
+  // Set 2026-09-03. See src/lib/season.ts for the reanalysis behind the bounds.
+  //
+  // October scores best in the record, but October 2026 is four weeks out and
+  // that is not enough runway to get a dozen people to Peru — so the window
+  // opens 1 November instead. That still captures Nov 1–10, the strongest block
+  // for good days in the whole window (84%), about eight weeks out.
+  //
+  // It closes 10 December because the record says it is over after that: swell
+  // under 4 ft and standout days down to 8%.
   window: {
-    label: 'October – early December 2027',
-    start: '2027-10-01',
-    end: '2027-12-15',
+    label: '1 November – 10 December 2026',
+    start: '2026-11-01',
+    end: '2026-12-10',
     locked: false,
   },
   groom: null as string | null,

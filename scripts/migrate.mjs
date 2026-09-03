@@ -1,5 +1,5 @@
 // Applies db/schema.sql to whatever DATABASE_URL points at.
-//   node scripts/migrate.mjs
+//   node --env-file=.env.local scripts/migrate.mjs
 import { readFileSync } from 'node:fs'
 import { neon } from '@neondatabase/serverless'
 
@@ -12,16 +12,21 @@ if (!url) {
 const sql = neon(url)
 const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8')
 
-// neon()'s tagged-template form is one statement per call, so split on the
-// statement terminator and run them in order.
+// Strip `--` line comments FIRST, then split. Splitting first and discarding
+// chunks that begin with a comment silently swallows the statement underneath
+// the comment — which is how `attendees` went missing and took the availability
+// foreign key down with it.
 const statements = schema
-  .split(/;\s*$/m)
+  .split('\n')
+  .filter((line) => !/^\s*--/.test(line))
+  .join('\n')
+  .split(';')
   .map((s) => s.trim())
-  .filter((s) => s && !s.startsWith('--'))
+  .filter(Boolean)
 
 for (const statement of statements) {
   await sql.query(statement)
-  console.log('ok  ' + statement.split('\n')[0].slice(0, 72))
+  console.log('ok  ' + statement.split('\n')[0].slice(0, 68))
 }
 
 console.log(`\napplied ${statements.length} statements`)
