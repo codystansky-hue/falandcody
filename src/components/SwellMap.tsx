@@ -62,7 +62,23 @@ export default function SwellMap() {
         <p className="marker">Live · ECMWF via Windy</p>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Phone: a link, not an embed. An interactive map inside a scrolling
+          page is a scroll trap on touch, and a slow iframe leaves half a screen
+          of blank. Tablet and up get the real thing. */}
+      <a
+        href={`https://www.windy.com/-Waves-waves?${layer.key},${SPOT.lat},${SPOT.lon},5`}
+        target="_blank"
+        rel="noreferrer"
+        className="sm:hidden card p-5 flex items-center justify-between gap-4"
+      >
+        <span>
+          <span className="font-semibold block">Open the live {layer.label.toLowerCase()} map</span>
+          <span className="text-sm text-slate2">Windy, centred on the point</span>
+        </span>
+        <span className="mono text-lg shrink-0">↗</span>
+      </a>
+
+      <div className="hidden sm:block card overflow-hidden">
         <iframe
           key={layer.key}
           title={`${layer.label} map centred on Chicama`}
