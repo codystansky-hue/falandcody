@@ -47,7 +47,8 @@ export const PROPOSED_WEEKS: ProposedWeek[] = [
     firing: 20,
     swellFt: 4.9,
     periodS: 11.3,
-    pitch: 'The greedy one. Nearly as reliable, but almost double the odds of a standout day.',
+    pitch:
+      'The greedy one. Nearly as reliable, but almost double the odds of a standout day. It also brackets US Thanksgiving (26 Nov 2026), which shows up as roughly $200 a head on every route measured — pay it for the swell, not by accident.',
   },
   {
     key: 'nov28',

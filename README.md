@@ -93,10 +93,27 @@ messages, so it is about 100 lines of dispatch and survives cold starts with no 
 vote, not a blank calendar. Every candidate Saturday was scored against the same calendar days
 across 2021–2025. Free-form ranges survive behind a disclosure.
 
-**Flights** need one input — three letters. `src/lib/flightSearch.ts` builds prefilled Google
-Flights / Kayak / Skyscanner URLs for the winning week, plus the Lima split that people who have
-not been to Peru do not know exists. No key, no account. The optional Travelpayouts token only
-adds indicative prices on top.
+**Flights** need one input — three letters. You get three things from it, none of which need a key:
+
+1. **The journey**, computed from the vendored OurAirports table (`src/lib/journey.ts`) — distance
+   to Lima, whether it is nonstop, airborne time, and door-to-door including the Lima connection,
+   the Trujillo hop and the drive up the coast.
+2. **Live prices per week** (`src/lib/googleFlights.ts`). Google Flights encodes a search into the
+   `?tfs=` parameter as a base64url Protobuf; build that and the ordinary page returns real fares.
+   Hand-encoded, so no protobuf dependency. Field numbers from
+   [AWeirdDev/flights](https://github.com/AWeirdDev/flights) (MIT).
+3. **Prefilled searches** (`src/lib/flightSearch.ts`) — Google Flights, Kayak, Skyscanner, plus the
+   Lima split that people who have not been to Peru do not know exists.
+
+Google's page is intermittent — a usable response roughly two times in three, throttling rather
+than failure. So `src/lib/fares-cache.ts` retries once, writes every success to `fare_snapshots`,
+and falls back to the last stored price (labelled stale past six hours). The week-comparison table
+reads **cache only**, because origins × weeks would otherwise be two dozen outbound requests per
+page view; the cache is warmed organically when someone looks up their own route.
+
+None of it is a supported API and it can break without warning. The site degrades correctly — the
+journey model, the search buttons and the comparison table minus its price columns need none of it.
+Travelpayouts survives as an optional second source when `TRAVELPAYOUTS_TOKEN` is set.
 
 ## Layout
 
