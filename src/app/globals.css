@@ -3,86 +3,98 @@
 @tailwind utilities;
 
 /*
-  Chicama sits where the Atacama meets the Humboldt current: blinding desert
-  light, bone-dry ochre cliffs, and water that is cold grey-green rather than
-  tropical blue. The palette is taken from that, not from surf-poster blue.
+  ─────────────────────────────────────────────────────────────────────────────
+  THE PALETTE — change these nine values and the whole site follows.
+
+  Nothing below hard-codes a colour, and no component does either: Tailwind
+  classes like `text-ink` and `bg-linen` read these variables through
+  tailwind.config.js. So you can redecorate the entire site here without
+  opening a single component, and without knowing any React.
+
+  What is here now is warm and quiet: unbleached linen, ink that is almost but
+  not quite black, a muted olive for the things that matter and a dusty rose
+  for the things that need a second look. Swap them for your own.
+  ─────────────────────────────────────────────────────────────────────────────
 */
 :root {
-  --bone: #e6e2d6;
-  --bone-2: #dcd7c8;
-  --foam: #fbfaf5;
-  --ink: #0e2b29;
-  --sea: #16413e;
-  --slate: #4f6462;
-  --ochre: #b8813c;
-  --rust: #a83a22;
-  --line: rgba(14, 43, 41, 0.16);
+  --linen: #f2eee6;   /* the page */
+  --linen-2: #e7e1d5; /* hover, stripes, anything one step down */
+  --paper: #fdfcf9;   /* cards, form fields */
+  --ink: #23201c;     /* body text */
+  --deep: #3d3a33;    /* hover on dark things */
+  --muted: #6b655b;   /* secondary text */
+  --olive: #7a7d55;   /* the accent — buttons' focus ring, active nav, rules */
+  --rose: #a8543f;    /* warnings and anything that needs a second look */
+  --line: rgba(35, 32, 28, 0.14);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--bone);
+  background: var(--linen);
   color: var(--ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--ochre);
-  color: var(--foam);
+  background: var(--olive);
+  color: var(--paper);
 }
 
-/* One visible focus treatment everywhere, including keyboard-only. */
+/* One visible focus treatment everywhere, including keyboard-only. Guests will
+   include people filling this in on a phone, on a train, at 60. */
 :focus-visible {
-  outline: 2px solid var(--ochre);
+  outline: 2px solid var(--olive);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
 @layer components {
   .display {
-    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 0.92;
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.02;
   }
 
+  /* Anything that is really an instrument reading: times, flight numbers,
+     prices, the countdown. Tabular figures so columns line up. */
   .mono {
     font-family: var(--font-mono), ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
   }
 
-  /* Distance markers down the point. Chicama's sections really are measured in
-     metres from the headland, so the eyebrow carries information. */
+  /* The small caps line above a heading. */
   .marker {
     font-family: var(--font-mono), ui-monospace, monospace;
     font-size: 0.6875rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--slate);
+    color: var(--muted);
   }
 
   .card {
-    background: var(--foam);
+    background: var(--paper);
     border: 1px solid var(--line);
   }
 
   .field {
     width: 100%;
-    background: var(--foam);
+    background: var(--paper);
     border: 1px solid var(--line);
     padding: 0.6rem 0.75rem;
     font-size: 0.9375rem;
     color: var(--ink);
   }
   .field::placeholder {
-    color: rgba(79, 100, 98, 0.65);
+    color: rgba(107, 101, 91, 0.65);
   }
   .field:focus {
-    border-color: var(--ochre);
+    border-color: var(--olive);
   }
 
   .btn {
@@ -91,14 +103,14 @@ body {
     justify-content: center;
     gap: 0.5rem;
     background: var(--ink);
-    color: var(--foam);
+    color: var(--paper);
     padding: 0.7rem 1.25rem;
     font-weight: 600;
     font-size: 0.9375rem;
     transition: background 140ms ease;
   }
   .btn:hover {
-    background: var(--sea);
+    background: var(--deep);
   }
   .btn[disabled] {
     opacity: 0.5;
@@ -111,7 +123,7 @@ body {
     border: 1px solid var(--line);
   }
   .btn-quiet:hover {
-    background: var(--bone-2);
+    background: var(--linen-2);
   }
 
   /* Table header cell. Deliberately NOT `.label` — that sets display:block,
@@ -122,7 +134,7 @@ body {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--slate);
+    color: var(--muted);
     white-space: nowrap;
     text-align: left;
   }
@@ -133,34 +145,37 @@ body {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--slate);
+    color: var(--muted);
     margin-bottom: 0.35rem;
   }
-}
 
-/* The wave draws itself once on load. Everything else on the page holds still. */
-@keyframes peel {
-  to {
-    stroke-dashoffset: 0;
+  /* A chip that is either on or off — event picker, side picker, yes/no/maybe. */
+  .chip {
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .chip:hover {
+    background: var(--linen-2);
+  }
+  .chip[aria-pressed='true'] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--paper);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
-  }
-}
-
-/* Riders surface behind the crest as it draws past them. */
-@keyframes riderIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }

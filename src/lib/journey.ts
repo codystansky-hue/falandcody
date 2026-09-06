@@ -1,10 +1,11 @@
 import airports from './airports.json'
-import { AIRPORTS, TRIP } from './config'
+import { AIRPORTS, WEDDING } from './config'
 
-// How long it actually takes to get from someone's home airport to the point,
-// computed rather than guessed. Everything here is arithmetic on real airport
-// coordinates (OurAirports, public domain) plus a few stated assumptions about
-// connections, so it degrades to "roughly right" rather than to nothing.
+// How long it actually takes a guest to get from their home airport to the
+// venue door, computed rather than guessed. Everything here is arithmetic on
+// real airport coordinates (OurAirports, public domain) plus a few stated
+// assumptions about connections, so it degrades to "roughly right" rather than
+// to nothing.
 //
 // This file is SERVER ONLY — the airport table is ~300 KB and has no business
 // in a browser bundle. The form reaches it through /api/journey instead.
@@ -12,7 +13,14 @@ import { AIRPORTS, TRIP } from './config'
 type Row = { i: string; n: string; c: string; k: string; y: number; x: number; b: boolean }
 const TABLE = airports as unknown as Record<string, Row>
 
-export type Airport = { iata: string; name: string; city: string; country: string; lat: number; lon: number }
+export type Airport = {
+  iata: string
+  name: string
+  city: string
+  country: string
+  lat: number
+  lon: number
+}
 
 export function lookup(code: string): Airport | null {
   const row = TABLE[code.toUpperCase().trim()]
@@ -34,7 +42,7 @@ export function suggest(query: string, limit = 6): Airport[] {
     else if (row.n.toLowerCase().includes(q)) rank = 3
     if (rank < 0) continue
     // Big airports first within a rank — nobody connects through a regional
-    // strip on the way to Peru.
+    // strip on the way to a wedding.
     hits.push({ row, rank: rank * 2 + (row.b ? 0 : 1) })
   }
   hits.sort((a, b) => a.rank - b.rank || a.row.i.localeCompare(b.row.i))
@@ -64,26 +72,21 @@ export function distanceKm(a: Airport, b: Airport) {
 // amount of distance accounts for.
 const airborneHours = (km: number) => km / 800 + 0.5
 
-// Cities I am confident hold a nonstop to Lima. Deliberately short: a wrong
-// "direct" claim sends someone hunting for a flight that does not exist, so
-// anything not on this list is described as connecting, which is the safe error.
-const LIMA_NONSTOP = new Set([
-  'MIA', 'JFK', 'LAX', 'IAH', 'DFW', 'ATL', 'MCO', 'YYZ',
-  'MEX', 'PTY', 'BOG', 'SCL', 'EZE', 'GRU', 'GIG', 'MAD', 'AMS', 'CDG',
-])
-
-// Immigration and a domestic recheck in Lima. Through-ticketed connections can
-// legally be shorter, but this is what to plan a day around.
-const LIMA_CONNECTION_HOURS = 2.5
-// Nobody flies origin → hub → LIM in zero time.
-const HUB_CONNECTION_HOURS = 2
+// Beyond this, assume a connection unless the origin is on the known-nonstop
+// list. Short of it, direct service is the common case.
+const NONSTOP_RANGE_KM = 4000
+const CONNECTION_HOURS = 2
+// A change of airline or terminal, and often a bag recheck, at the gateway.
+const GATEWAY_CONNECTION_HOURS = 2.5
 
 export type Journey = {
   origin: Airport
-  lima: { km: number; airborneHours: number; nonstop: boolean }
-  hop: { km: number; airborneHours: number }
+  /** The long leg: to the gateway when there is one, otherwise straight in. */
+  main: { to: string; km: number; airborneHours: number; nonstop: boolean }
+  /** The gateway → arrival hop. Null when guests fly straight in. */
+  hop: { to: string; km: number; airborneHours: number } | null
   road: { km: number; hours: number }
-  /** Door to door: flights, connections and the drive up the coast. */
+  /** Door to door: flights, connections and the drive to the venue. */
   totalHours: number
   stops: number
   summary: string
@@ -92,35 +95,43 @@ export type Journey = {
 export function journeyFor(originCode: string): Journey | null {
   const origin = lookup(originCode)
   if (!origin) return null
-  const lima = lookup(AIRPORTS.gateway.iata)
-  const tru = lookup(AIRPORTS.arrival.iata)
-  if (!lima || !tru) return null
 
-  const toLimaKm = distanceKm(origin, lima)
-  const hopKm = distanceKm(lima, tru)
-  const nonstop = LIMA_NONSTOP.has(origin.iata)
+  const arrival = lookup(AIRPORTS.arrival.iata)
+  if (!arrival) return null
+  const gateway = AIRPORTS.gateway ? lookup(AIRPORTS.gateway.iata) : null
 
-  const intlAir = airborneHours(toLimaKm)
-  const hopAir = airborneHours(hopKm)
+  // The long haul ends at the gateway when there is one; otherwise it is the
+  // whole flight.
+  const mainTarget = gateway ?? arrival
+  const mainKm = distanceKm(origin, mainTarget)
+  const nonstop =
+    WEDDING.travel.nonstopFrom.includes(origin.iata) || mainKm <= NONSTOP_RANGE_KM
+  const mainAir = airborneHours(mainKm)
 
-  const stops = (nonstop ? 0 : 1) + 1 // the Lima→Trujillo hop always counts
-  const total =
-    intlAir +
-    (nonstop ? 0 : HUB_CONNECTION_HOURS) +
-    LIMA_CONNECTION_HOURS +
-    hopAir +
-    TRIP.venue.transferHours
+  const hopKm = gateway ? distanceKm(gateway, arrival) : 0
+  const hopAir = gateway ? airborneHours(hopKm) : 0
+
+  const stops = (nonstop ? 0 : 1) + (gateway ? 1 : 0)
+  const totalHours =
+    mainAir +
+    (nonstop ? 0 : CONNECTION_HOURS) +
+    (gateway ? GATEWAY_CONNECTION_HOURS + hopAir : 0) +
+    WEDDING.travel.transferHours
+
+  const tail = gateway
+    ? `, then the hop to ${arrival.iata} and the drive to the venue`
+    : ', then the drive to the venue'
 
   return {
     origin,
-    lima: { km: Math.round(toLimaKm), airborneHours: intlAir, nonstop },
-    hop: { km: Math.round(hopKm), airborneHours: hopAir },
-    road: { km: TRIP.venue.transferKm, hours: TRIP.venue.transferHours },
-    totalHours: total,
+    main: { to: mainTarget.iata, km: Math.round(mainKm), airborneHours: mainAir, nonstop },
+    hop: gateway ? { to: arrival.iata, km: Math.round(hopKm), airborneHours: hopAir } : null,
+    road: { km: WEDDING.travel.transferKm, hours: WEDDING.travel.transferHours },
+    totalHours,
     stops,
     summary: nonstop
-      ? `${origin.iata} → LIM nonstop, then the hop to TRU and the drive up the coast.`
-      : `${origin.iata} → LIM via one hub, then the hop to TRU and the drive up the coast.`,
+      ? `${origin.iata} → ${mainTarget.iata} nonstop${tail}.`
+      : `${origin.iata} → ${mainTarget.iata} via one hub${tail}.`,
   }
 }
 

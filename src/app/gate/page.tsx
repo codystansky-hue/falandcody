@@ -1,6 +1,6 @@
-import { TRIP } from '@/lib/config'
+import { WEDDING, real } from '@/lib/config'
 
-export const metadata = { title: 'Chicama' }
+export const metadata = { title: 'Come in' }
 
 export default async function GatePage({
   searchParams,
@@ -10,13 +10,18 @@ export default async function GatePage({
   const params = await searchParams
   const admin = params.scope === 'admin'
 
+  const names = real(WEDDING.couple.joined)
+  const town = real(WEDDING.venue.town)
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
-        <p className="marker mb-3">8°S · 79°W · Puerto Malabrigo</p>
-        <h1 className="display text-5xl mb-2">CHICAMA</h1>
-        <p className="text-slate2 mb-8">
-          {admin ? 'Organiser access.' : `${TRIP.subtitle}. Passphrase is in the group chat.`}
+        {town && <p className="marker mb-3">{town}</p>}
+        <h1 className="display text-5xl mb-2">{names ?? 'Our wedding'}</h1>
+        <p className="text-muted mb-8">
+          {admin
+            ? 'Organiser view.'
+            : 'The word is on your invitation. If you cannot find it, ask us — it is not a test.'}
         </p>
 
         <form action="/api/gate" method="post" className="space-y-4">
@@ -24,7 +29,7 @@ export default async function GatePage({
           {admin && <input type="hidden" name="scope" value="admin" />}
           <div>
             <label className="label" htmlFor="passphrase">
-              Passphrase
+              {admin ? 'Organiser passphrase' : 'Passphrase'}
             </label>
             <input
               id="passphrase"
@@ -37,7 +42,7 @@ export default async function GatePage({
             />
           </div>
           {params.error && (
-            <p className="text-sm text-rust" role="alert">
+            <p className="text-sm text-rose" role="alert">
               That is not it. Try again.
             </p>
           )}
@@ -45,6 +50,15 @@ export default async function GatePage({
             {admin ? 'Unlock organiser view' : 'Come in'}
           </button>
         </form>
+
+        {!admin && real(WEDDING.contact.email) && (
+          <p className="text-sm text-muted mt-6">
+            Stuck?{' '}
+            <a href={`mailto:${WEDDING.contact.email}`} className="underline underline-offset-2">
+              {WEDDING.contact.email}
+            </a>
+          </p>
+        )}
       </div>
     </div>
   )

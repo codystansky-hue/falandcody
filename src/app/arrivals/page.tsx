@@ -1,16 +1,24 @@
-import { Notice, Page } from '@/components/ui'
-import { groupShuttles, listAttendees, type Attendee } from '@/lib/attendees'
-import { arrivalsAtTrujillo, callsignMatches, isOpenSkyConfigured, type Arrival } from '@/lib/opensky'
-import { AIRPORTS, TRIP } from '@/lib/config'
+import { notFound } from 'next/navigation'
+import { Notice, Page, Pill } from '@/components/ui'
+import { groupTransfers, listGuests, seats, type Guest } from '@/lib/guests'
+import {
+  arrivalsAtVenueAirport,
+  callsignMatches,
+  hasArrivalIcao,
+  isOpenSkyConfigured,
+  type Arrival,
+} from '@/lib/opensky'
+import { WEDDING, real } from '@/lib/config'
 
-// Roster-driven. OpenSky results are cached for 5 minutes inside the lib.
+// Guest-list driven. OpenSky results are cached for 5 minutes inside the lib.
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Arrivals — Chicama' }
+export const metadata = { title: 'Arrivals' }
 
-function peruTime(date: Date) {
+function venueTime(date: Date) {
+  const tz = real(WEDDING.date.tz)
   return date.toLocaleString('en-GB', {
-    timeZone: 'America/Lima',
+    ...(tz ? { timeZone: tz } : {}),
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -20,41 +28,52 @@ function peruTime(date: Date) {
 }
 
 export default async function ArrivalsPage() {
-  const attendees = await listAttendees()
-  const runs = groupShuttles(attendees)
+  if (!WEDDING.travel.flyIn) notFound()
+
+  const guests = await listGuests()
+  const runs = groupTransfers(guests)
 
   // Only worth calling OpenSky when somebody is actually landing around now —
   // it only reports flights that have already touched down.
-  const soon = attendees.some((a) => {
-    if (!a.arrival_at) return false
-    const delta = new Date(a.arrival_at).getTime() - Date.now()
+  const soon = guests.some((g) => {
+    if (!g.arrival_at) return false
+    const delta = new Date(g.arrival_at).getTime() - Date.now()
     return delta < 6 * 3600_000 && delta > -24 * 3600_000
   })
 
   let landed: Arrival[] | null = null
-  if (soon && isOpenSkyConfigured()) {
-    landed = await arrivalsAtTrujillo(24)
+  if (soon && isOpenSkyConfigured() && hasArrivalIcao()) {
+    landed = await arrivalsAtVenueAirport(24)
   }
 
-  const hasLanded = (person: Attendee) =>
+  const hasLanded = (guest: Guest) =>
     Boolean(
-      person.arrival_flight &&
-        landed?.some((flight) => callsignMatches(person.arrival_flight!, flight.callsign)),
+      guest.arrival_flight &&
+        landed?.some((flight) => callsignMatches(guest.arrival_flight!, flight.callsign)),
     )
 
-  const unbooked = attendees.filter((a) => a.status !== 'out' && !a.arrival_at)
+  const arrival = WEDDING.travel.arrival
+  const waiting = guests.filter((g) => g.status !== 'no' && !g.arrival_at && g.origin_airport)
 
   return (
     <Page
-      marker={`${AIRPORTS.arrival.city} · ${AIRPORTS.arrival.iata} / ${AIRPORTS.arrival.icao}`}
+      marker={
+        real(arrival.city)
+          ? `${arrival.city} · ${[real(arrival.iata), arrival.icao].filter(Boolean).join(' / ')}`
+          : 'Arrivals'
+      }
       title="Arrivals"
-      lede={`Everyone lands at Trujillo and rides ${TRIP.venue.transferKm} km up the coast. Anyone touching down within two hours of each other shares a van — this is the manifest to hand the hotel.`}
+      lede={
+        WEDDING.travel.runningShuttle
+          ? 'Anyone touching down within two hours of each other shares a car. This is the manifest — it builds itself out of the flight times on people’s replies.'
+          : 'Who lands when, so you can share a taxi with whoever is on your flight.'
+      }
     >
       {runs.length === 0 ? (
         <Notice title="No arrival times yet">
           <p>
-            Shuttle runs are worked out from the landing times on everyone&rsquo;s page. As soon as
-            two people have booked, the vans group themselves here.
+            This builds itself out of the landing times people put on their replies. As soon as two
+            guests have booked, the cars group themselves here.
           </p>
         </Notice>
       ) : (
@@ -63,31 +82,34 @@ export default async function ArrivalsPage() {
             <section key={i} className="card">
               <div className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4 border-b border-hairline">
                 <h2 className="display text-xl">
-                  Van {i + 1} · {run.riders.length} {run.riders.length === 1 ? 'rider' : 'riders'}
+                  Car {i + 1} · {seats(run.riders)} {seats(run.riders) === 1 ? 'seat' : 'seats'}
                 </h2>
                 <p className="mono text-sm">
-                  Leaves {AIRPORTS.arrival.iata} {peruTime(run.departsAt)}
+                  Leaves {real(arrival.iata) ?? 'the airport'} {venueTime(run.departsAt)}
                 </p>
               </div>
               <ul className="divide-y divide-hairline">
-                {run.riders.map((person) => {
-                  const down = hasLanded(person)
+                {run.riders.map((guest) => {
+                  const party = [
+                    guest.plus_one ? guest.plus_one_name || 'plus one' : null,
+                    guest.kids > 0 ? `${guest.kids} kids` : null,
+                  ].filter(Boolean)
                   return (
-                    <li key={person.id} className="px-5 py-3 flex flex-wrap gap-x-4 gap-y-1 justify-between">
+                    <li
+                      key={guest.id}
+                      className="px-5 py-3 flex flex-wrap gap-x-4 gap-y-1 justify-between"
+                    >
                       <span className="font-medium">
-                        {person.nickname || person.name}
-                        <span className="text-slate2 font-normal">
-                          {person.origin_city ? ` · from ${person.origin_city}` : ''}
+                        {guest.name}
+                        <span className="text-muted font-normal">
+                          {party.length ? ` + ${party.join(', ')}` : ''}
+                          {guest.origin_city ? ` · from ${guest.origin_city}` : ''}
                         </span>
                       </span>
                       <span className="mono text-sm flex items-center gap-3">
-                        {person.arrival_flight ?? 'flight tbc'}
-                        <span className="text-slate2">{peruTime(new Date(person.arrival_at!))}</span>
-                        {down && (
-                          <span className="text-[0.65rem] uppercase tracking-widest bg-ink text-foam px-2 py-0.5">
-                            On the ground
-                          </span>
-                        )}
+                        {guest.arrival_flight ?? 'flight tbc'}
+                        <span className="text-muted">{venueTime(new Date(guest.arrival_at!))}</span>
+                        {hasLanded(guest) && <Pill tone="solid">on the ground</Pill>}
                       </span>
                     </li>
                   )
@@ -98,28 +120,33 @@ export default async function ArrivalsPage() {
         </div>
       )}
 
-      {unbooked.length > 0 && (
-        <p className="mt-6 text-sm text-slate2">
-          Still without a landing time: {unbooked.map((a) => a.nickname || a.name).join(', ')}.
+      {waiting.length > 0 && (
+        <p className="mt-6 text-sm text-muted">
+          Flying, but no landing time yet: {waiting.map((g) => g.name).join(', ')}.
         </p>
       )}
 
       <section className="mt-12">
         <p className="marker mb-4">Live tracking</p>
-        {!isOpenSkyConfigured() ? (
-          <Notice title="Live tracking is not switched on">
+        {!hasArrivalIcao() ? (
+          <Notice title="Live tracking needs the airport’s ICAO code">
             <p>
               The board above works from the times people typed in. To have it confirm who is
-              actually on the ground, create a free API client at opensky-network.org and set{' '}
-              <span className="mono">OPENSKY_CLIENT_ID</span> and{' '}
-              <span className="mono">OPENSKY_CLIENT_SECRET</span>.
+              actually on the ground, put the four-letter ICAO code of the arrival airport (KSEA,
+              EGLL, LFPG…) into <span className="mono">WEDDING.travel.arrival.icao</span>.
             </p>
+          </Notice>
+        ) : !isOpenSkyConfigured() ? (
+          <Notice title="Live tracking is not switched on">
             <p>
-              OpenSky retired password auth in March 2026, so anonymous requests no longer work.
+              Create a free API client at opensky-network.org and set{' '}
+              <span className="mono">OPENSKY_CLIENT_ID</span> and{' '}
+              <span className="mono">OPENSKY_CLIENT_SECRET</span>. Entirely optional — the board
+              works without it.
             </p>
           </Notice>
         ) : !soon ? (
-          <p className="text-sm text-slate2">
+          <p className="text-sm text-muted">
             Nobody is due within six hours. Tracking wakes up on arrival day — OpenSky only reports
             flights that have already landed, so there is nothing to poll until then.
           </p>
@@ -128,9 +155,9 @@ export default async function ArrivalsPage() {
             <p>Check the credentials, or wait — the free tier throttles by daily credits.</p>
           </Notice>
         ) : (
-          <p className="text-sm text-slate2">
-            {landed.length} movements into {AIRPORTS.arrival.icao} in the last 24 hours. Anyone
-            matched against them is flagged on the ground above.
+          <p className="text-sm text-muted">
+            {landed.length} movements into {arrival.icao} in the last 24 hours. Anyone matched
+            against them is flagged on the ground above.
           </p>
         )}
       </section>

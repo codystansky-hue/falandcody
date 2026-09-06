@@ -1,22 +1,32 @@
-import { AIRPORTS, FOIL_LEVELS, GEAR_ITEMS, TRIP } from '@/lib/config'
-import { getByToken, groupShuttles, listAttendees, listVotes, passportRisk } from '@/lib/attendees'
-import { saveAttendee, saveVotes } from '@/lib/saveAttendee'
-import { compass, getForecast, metresToFeet } from '@/lib/swell'
-import { CLIMATE_SOURCE, SEASON, WINDOW_BLOCKS, wetsuitFor } from '@/lib/season'
-import { PROPOSED_WEEKS, tallyWeeks, VOTES, weekByKey } from '@/lib/weeks'
+import {
+  EVENT_KEYS,
+  RSVP_STATUS,
+  SIDE_KEYS,
+  STAY_KEYS,
+  STAY_OPTIONS,
+  WEDDING,
+  defaultStay,
+  eventDate,
+  formatDate,
+  isTodo,
+  outstanding,
+  real,
+  weddingDate,
+} from '@/lib/config'
+import { getByToken, groupTransfers, headcount, headcountFor, listGuests, seats, tally } from '@/lib/guests'
+import { saveGuest } from '@/lib/saveGuest'
 import { routeOptions } from '@/lib/flightSearch'
 import { hoursLabel, journeyFor } from '@/lib/journey'
 import { isDbReady } from '@/lib/db'
-import { DEFAULTS, IGV_RATE, costFor, usd } from '@/lib/costs'
-import { HOTEL } from '@/lib/hotel'
+import { DEFAULTS, estimate, money } from '@/lib/costs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// A Model Context Protocol server over Streamable HTTP, so anyone on the trip
-// can point their own Claude at this site and just talk to it:
+// A Model Context Protocol server over Streamable HTTP, so a guest can point
+// their own Claude at this site and just talk to it:
 //
-//   "add me to the Chicama trip, I'm flying out of Denver, second week works"
+//   "RSVP me for the wedding, two of us, flying from Denver, we'll skip brunch"
 //
 // Deliberately hand-rolled JSON-RPC rather than pulling in the SDK: the whole
 // surface is a handful of tools with no sessions, no server-initiated messages
@@ -52,52 +62,56 @@ const fail = (message: string) => ({
   isError: true,
 })
 
+/** Never hand a model a `TODO:` placeholder — it will repeat it as fact. */
+const say = (v: string) => (isTodo(v) ? null : v)
+
+const venueTime = (iso: string | null) => {
+  if (!iso) return null
+  const tz = real(WEDDING.date.tz)
+  return new Date(iso).toLocaleString('en-GB', tz ? { timeZone: tz } : {})
+}
+
 // ---------------------------------------------------------------- tool schemas
 
 const TOOLS = [
   {
-    name: 'trip_overview',
+    name: 'wedding_overview',
     description:
-      'The trip at a glance: where it is, the window under consideration, the venue and rooms, how you get there, and how many people are in so far. Start here.',
+      'The wedding at a glance: who, when, where, the shape of the weekend, how to get there, and how many people have replied. Start here before answering anything else.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'proposed_weeks',
+    name: 'schedule',
     description:
-      'The three candidate weeks with their historical conditions and the current vote tally. Use this before suggesting dates to anyone.',
+      'Every event of the weekend in order, with dates, times, places, dress code and how many people are coming to each. Use for any "when is X" or "what should I wear" question.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'swell_forecast',
+    name: 'guest_list',
     description:
-      'Live seven-day swell, wind and conditions score for the point, from Open-Meteo. Real forecast data, refreshed hourly.',
+      'Who has replied and who is coming, with head counts. Contact details, addresses and private notes are deliberately NOT exposed here.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'season_outlook',
+    name: 'where_to_stay',
     description:
-      'Month-by-month climatology for Chicama computed from five years of reanalysis: share of good and firing days, swell, water temperature, wetsuit advice. Use for questions about when to go or what to pack.',
+      'The room blocks the couple have held: rates, booking codes, deadlines and how to book. Read this before telling anybody to book a hotel themselves.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'crew_list',
+    name: 'faq',
     description:
-      'Everyone who has signed up, with where they are flying from, their arrival time, foil level and gear. Personal contact details are not exposed here.',
+      'The couple’s own answers to the common questions — dress code, plus-ones, children, parking, timings. Prefer these over guessing.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'find_flights',
     description:
-      'Prefilled flight-search links from a home airport for one of the proposed weeks. Returns real URLs to Google Flights, Kayak and Skyscanner with dates already filled in — give them to the user to click.',
+      'Prefilled flight-search links from a home airport, on the dates a guest would actually travel, plus a computed journey time. Returns real URLs to Google Flights, Kayak and Skyscanner — give them to the user to click.',
     inputSchema: {
       type: 'object',
       properties: {
         origin_airport: { type: 'string', description: 'Three-letter IATA code, e.g. DEN' },
-        week_key: {
-          type: 'string',
-          enum: PROPOSED_WEEKS.map((w) => w.key),
-          description: 'Which proposed week. Defaults to the one currently winning the vote.',
-        },
       },
       required: ['origin_airport'],
     },
@@ -105,406 +119,288 @@ const TOOLS = [
   {
     name: 'arrivals_board',
     description:
-      'Who lands when at Trujillo, and which shuttle run each person is grouped into. Anyone landing within two hours of each other shares a van.',
+      'Who lands when, and which car from the airport each person is grouped into. Anyone landing within two hours of each other shares one.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'trip_budget',
+    name: 'cost_estimate',
     description:
-      'What the trip costs per person and for the group, broken down by room, transfer, food, gear hire and flights. Assumptions can be overridden. Use for any "how much will this cost" question.',
+      'What it costs one guest to come — bed, flights, transfer, food, gift. Every assumption can be overridden. Use for any "how much will this cost me" question.',
     inputSchema: {
       type: 'object',
       properties: {
-        occupancy: { type: 'number', description: 'People per room, 1-3. Default 2.' },
-        nights: { type: 'number', description: 'Default 7.' },
-        paying_igv: {
-          type: 'boolean',
-          description: 'Model the 18% Peruvian sales tax. Default false, because foreign tourists staying under 60 days are exempt.',
-        },
+        nights: { type: 'number', description: `Default ${DEFAULTS.nights}.` },
+        sharing: { type: 'number', description: 'People per room. Default 2.' },
+        room_rate: { type: 'number', description: 'Per room per night.' },
+        flight: { type: 'number', description: 'Return airfare per person.' },
+        gift: { type: 'number' },
       },
     },
   },
   {
-    name: 'how_to_book_the_hotel',
+    name: 'rsvp',
     description:
-      'How the group books Chicama Boutique Hotel, the contact channels, and the reservation terms. Read this before telling anyone to book a room — individual bookings are the wrong move for this trip.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'join_trip',
-    description:
-      'Add yourself to the trip, or update your details. Returns an edit_token — KEEP IT and pass it back on every later call, otherwise you will create a duplicate person. Only `name` is required; everything else can be filled in later.',
+      'Reply to the invitation, or change a reply already sent. Returns an edit_token — KEEP IT and pass it back on every later call, otherwise you will create a duplicate guest instead of updating one. Only `name` is required; everything else can follow later.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
         edit_token: {
           type: 'string',
-          description: 'From a previous join_trip call. Pass it to update instead of duplicating.',
+          description:
+            'From a previous rsvp call. Pass it to UPDATE that guest. Omit only for a genuinely new person.',
         },
-        nickname: { type: 'string' },
-        status: { type: 'string', enum: ['in', 'maybe', 'out'] },
+        status: { type: 'string', enum: [...RSVP_STATUS], description: 'Default yes.' },
+        attending_events: {
+          type: 'array',
+          items: { type: 'string', enum: [...EVENT_KEYS] },
+          description: `Which parts they are coming to. Options: ${EVENT_KEYS.join(', ')}.`,
+        },
         email: { type: 'string' },
         phone: { type: 'string' },
+        postal_address: { type: 'string' },
+        side: { type: 'string', enum: [...SIDE_KEYS], description: 'Who invited them.' },
+        plus_one: { type: 'boolean' },
+        plus_one_name: { type: 'string' },
+        kids: { type: 'number' },
+        kids_names: { type: 'string' },
+        dietary: { type: 'string', description: 'For everyone in their party, in one line.' },
+        song_request: { type: 'string' },
+        message: { type: 'string', description: 'A note to the couple. Shown on the guest list.' },
         origin_city: { type: 'string' },
-        origin_airport: { type: 'string', description: 'Three-letter IATA code' },
+        origin_airport: { type: 'string', description: 'Three-letter IATA code.' },
         arrival_flight: { type: 'string' },
         arrival_at: {
           type: 'string',
-          description: 'Landing time in Peru local time, "YYYY-MM-DDTHH:MM". Peru is UTC-5, no DST.',
+          description: 'Landing time in the VENUE’s local time, e.g. 2027-05-14T16:20.',
         },
         departure_flight: { type: 'string' },
-        departure_at: { type: 'string', description: 'Peru local time, same format' },
-        needs_transfer: { type: 'boolean', description: 'Wants the hotel shuttle from Trujillo' },
-        room_pref: { type: 'string', enum: ['any', 'garden', 'ocean', 'premium'] },
-        roommate_pref: { type: 'string' },
-        foil_level: { type: 'string', enum: FOIL_LEVELS.map((l) => l.key) },
-        bringing_gear: {
-          type: 'array',
-          items: { type: 'string', enum: GEAR_ITEMS.map((g) => g.key) },
-        },
-        rental_needed: { type: 'string' },
-        wetsuit_size: { type: 'string' },
-        shirt_size: { type: 'string' },
-        dietary: { type: 'string' },
-        passport_expiry: {
+        departure_at: { type: 'string', description: 'Venue local time.' },
+        needs_transfer: { type: 'boolean', description: 'Wants a car from the airport.' },
+        stay_pref: {
           type: 'string',
-          description: 'YYYY-MM-DD. Peru requires six months validity past entry.',
+          enum: [...STAY_KEYS],
+          description: STAY_OPTIONS.map((o) => `${o.key} = ${o.label}`).join('; '),
         },
+        staying_with: { type: 'string' },
+        passport_expiry: { type: 'string', description: 'YYYY-MM-DD.' },
         emergency_contact: { type: 'string' },
-        flight_cost_usd: {
-          type: 'number',
-          description: 'What their flight actually cost, once booked. Feeds the budget.',
-        },
-        notes: { type: 'string' },
-        week_votes: {
-          type: 'object',
-          description: 'Vote per week key, e.g. {"nov07":"yes","nov21":"maybe","nov28":"no"}',
-        },
       },
       required: ['name'],
     },
   },
-  {
-    name: 'vote_weeks',
-    description:
-      'Vote yes, maybe or no on the proposed weeks for someone already on the trip. Needs their edit_token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        edit_token: { type: 'string' },
-        votes: {
-          type: 'object',
-          description: 'e.g. {"nov07":"yes","nov21":"yes","nov28":"no"}',
-        },
-      },
-      required: ['edit_token', 'votes'],
-    },
-  },
-]
+] as const
 
-// ------------------------------------------------------------------ tool calls
+// ---------------------------------------------------------------------- tools
 
 async function callTool(name: string, args: Json) {
   switch (name) {
-    case 'trip_overview': {
-      const crew = await listAttendees()
+    case 'wedding_overview': {
+      const guests = await listGuests()
+      const counts = tally(guests)
+      const date = weddingDate()
+      const stay = defaultStay()
+      const pending = outstanding()
+
       return text({
-        trip: TRIP.name,
-        what: 'Bachelor party at the longest left-hand wave in the world.',
-        window: TRIP.window,
-        venue: { ...TRIP.venue },
-        getting_there: {
-          arrival_airport: `${AIRPORTS.arrival.iata} (${AIRPORTS.arrival.city})`,
-          gateway: `${AIRPORTS.gateway.iata} (${AIRPORTS.gateway.city}) — nearly all international routes connect here`,
-          transfer: `${TRIP.venue.transferKm} km, about ${TRIP.venue.transferHours} hours by road`,
+        couple: say(WEDDING.couple.joined),
+        date: WEDDING.date.confirmed ? say(WEDDING.date.label) : null,
+        date_confirmed: WEDDING.date.confirmed && date !== null,
+        rsvp_by: say(WEDDING.date.rsvpBy),
+        venue: {
+          name: say(WEDDING.venue.name),
+          town: say(WEDDING.venue.town),
+          address: say(WEDDING.venue.address),
+          url: say(WEDDING.venue.url),
+          about: say(WEDDING.venue.note),
         },
-        crew: {
-          total: crew.length,
-          in: crew.filter((a) => a.status === 'in').length,
-          maybe: crew.filter((a) => a.status === 'maybe').length,
+        events: WEDDING.events.map((e) => e.name),
+        travel: WEDDING.travel.flyIn
+          ? {
+              land_at: say(WEDDING.travel.arrival.iata),
+              nearest_city: say(WEDDING.travel.arrival.city),
+              via: WEDDING.travel.gateway?.iata ?? null,
+              from_airport: WEDDING.travel.transferHours
+                ? `${WEDDING.travel.transferKm} km, about ${WEDDING.travel.transferHours} h`
+                : null,
+              suggested_dates: stay,
+            }
+          : 'Everybody drives — there is no flying involved.',
+        replies: counts,
+        contact: say(WEDDING.contact.email),
+        // Honest about what nobody has decided, so the model says "not settled
+        // yet" instead of inventing a venue.
+        not_yet_decided: pending.length
+          ? `${pending.length} details are still unset in the site config: ${pending.join(', ')}. Say they are not decided yet rather than guessing.`
+          : null,
+      })
+    }
+
+    case 'schedule': {
+      const guests = await listGuests()
+      return text({
+        date_confirmed: WEDDING.date.confirmed,
+        events: WEDDING.events.map((event) => {
+          const when = eventDate(event)
+          return {
+            key: event.key,
+            name: event.name,
+            date: when ? formatDate(when) : null,
+            time: say(event.time),
+            where: say(event.where),
+            dress_code: say(event.dressCode),
+            note: say(event.note),
+            optional: event.optional,
+            coming_so_far: headcountFor(guests, event.key),
+          }
+        }),
+      })
+    }
+
+    case 'guest_list': {
+      const guests = await listGuests()
+      const counts = tally(guests)
+      return text({
+        counts,
+        // Names, party size and public notes only. Everything a guest handed
+        // over for logistics stays behind /admin.
+        guests: guests.map((g) => ({
+          name: g.name,
+          status: g.status,
+          party_size: headcount(g),
+          bringing: [
+            g.plus_one ? g.plus_one_name || 'a plus one' : null,
+            g.kids > 0 ? `${g.kids} children` : null,
+          ].filter(Boolean),
+          from: g.origin_city,
+          coming_to: g.attending_events,
+          note: g.message,
+        })),
+      })
+    }
+
+    case 'where_to_stay': {
+      const guests = await listGuests()
+      const blocks = WEDDING.stay.blocks.filter((b) => !isTodo(b.name))
+      return text({
+        rooms_held_until: say(WEDDING.stay.blockReleaseDate),
+        group_email: say(WEDDING.stay.groupEmail),
+        blocks: blocks.map((b) => ({
+          name: b.name,
+          url: say(b.url),
+          nightly_rate: b.fromRate > 0 ? money(b.fromRate) : null,
+          rooms_held: b.rooms || null,
+          booking_code: b.code || null,
+          walk_minutes: b.walkMinutes,
+          drive_minutes: b.driveMinutes,
+          note: say(b.note),
+        })),
+        alternatives: say(WEDDING.stay.alternativesNote),
+        so_far: {
+          in_the_block: guests.filter((g) => g.status !== 'no' && g.stay_pref === 'block').length,
+          need_help: guests.filter((g) => g.status !== 'no' && g.stay_pref === 'help').length,
         },
-        note: 'Dates are not locked. Call proposed_weeks to see the options and the vote.',
       })
     }
 
-    case 'proposed_weeks': {
-      const votes = await listVotes()
-      const ranked = tallyWeeks(votes)
+    case 'faq':
       return text({
-        how_it_works: 'Say yes to every week you could make. Most yeses wins; a maybe counts half.',
-        weeks: ranked.map((w) => ({
-          key: w.key,
-          dates: w.label,
-          start: w.start,
-          end: w.end,
-          pitch: w.pitch,
-          historical: {
-            good_days_pct: w.good,
-            firing_days_pct: w.firing,
-            mean_swell_ft: w.swellFt,
-            mean_period_s: w.periodS,
-          },
-          votes: { yes: w.yes, maybe: w.maybe, no: w.no },
-        })),
-        leading: ranked[0]?.label ?? null,
-        source: CLIMATE_SOURCE,
+        answered: WEDDING.faq.filter((f) => !isTodo(f.a) && f.a.trim()),
+        unanswered: WEDDING.faq.filter((f) => isTodo(f.a) || !f.a.trim()).map((f) => f.q),
+        contact: say(WEDDING.contact.email),
+        note: 'Anything in `unanswered` has not been decided. Say so rather than guessing.',
       })
-    }
-
-    case 'swell_forecast': {
-      const days = await getForecast(7)
-      return text({
-        spot: 'Chicama, Puerto Malabrigo, Peru',
-        note: 'Period matters more than size here — long-period SSW groundswell is what wraps the headland.',
-        days: days.map((d) => ({
-          date: d.day,
-          swell_ft: metresToFeet(d.swellM)?.toFixed(1) ?? null,
-          period_s: d.periodS,
-          direction: `${compass(d.dirDeg)} ${d.dirDeg?.toFixed(0) ?? '?'}°`,
-          wind: `${d.windKmh?.toFixed(0) ?? '?'} km/h from ${compass(d.windDirDeg)}`,
-          score: d.score,
-          verdict: d.verdict,
-        })),
-      })
-    }
-
-    case 'season_outlook':
-      return text({
-        source: CLIMATE_SOURCE,
-        by_month: SEASON.map((m) => ({
-          month: m.month,
-          good_days_pct: m.good,
-          firing_days_pct: m.firing,
-          water_c: m.sst,
-          wetsuit: wetsuitFor(m.sst),
-          air_max_c: m.air[0],
-          air_min_c: m.air[1],
-          swell_ft: m.swellFt,
-          rain_mm: m.rainMm,
-          odds_of_3_good_days_in_a_week: m.weekOdds,
-        })),
-        ten_day_blocks_in_window: WINDOW_BLOCKS,
-        headline:
-          'October has the highest share of standout days of any month, and the coldest water of the year at 16.8 C. November is level on good days, driest and least crowded. After 10 December it is over.',
-        packing_warning:
-          'The Humboldt current keeps this water cold all year despite the latitude. A 4/3, or a 3/2 with boots. People pack for a desert and get in the water in boardshorts exactly once.',
-      })
-
-    case 'crew_list': {
-      const crew = await listAttendees()
-      return text(
-        crew.map((a) => ({
-          name: a.nickname || a.name,
-          full_name: a.name,
-          status: a.status,
-          from: a.origin_city,
-          home_airport: a.origin_airport,
-          arrival_flight: a.arrival_flight,
-          lands_peru_time: a.arrival_at
-            ? new Date(a.arrival_at).toLocaleString('en-GB', { timeZone: 'America/Lima' })
-            : null,
-          needs_shuttle: a.needs_transfer,
-          foil_level: a.foil_level,
-          bringing: a.bringing_gear,
-          renting: a.rental_needed,
-          passport_ok: passportRisk(a.passport_expiry, TRIP.window.end),
-        })),
-      )
-    }
 
     case 'find_flights': {
+      if (!WEDDING.travel.flyIn) return fail('Nobody is flying to this wedding — it is a drive.')
+
       const origin = String(args.origin_airport ?? '')
         .toUpperCase()
         .replace(/[^A-Z]/g, '')
       if (origin.length !== 3) return fail('origin_airport must be a three-letter IATA code.')
 
-      let week = args.week_key ? weekByKey(String(args.week_key)) : null
-      if (!week) {
-        const ranked = tallyWeeks(await listVotes())
-        week = ranked[0] ?? PROPOSED_WEEKS[0]
-      }
-      const routes = routeOptions(origin, week.start, week.end)
+      const stay = defaultStay()
+      if (!stay) return fail('The wedding date is not fixed yet, so there are no dates to search.')
+
       const j = journeyFor(origin)
       return text({
-        week: week.label,
-        depart: week.start,
-        return: week.end,
+        depart: stay.depart,
+        return: stay.return,
+        nights: stay.nights,
+        why_these_dates: 'In the day before the first event, out the day after the last.',
         journey: j
           ? {
               from: `${j.origin.iata} — ${j.origin.name}, ${j.origin.city} (${j.origin.country})`,
-              distance_to_lima_km: j.lima.km,
-              nonstop_to_lima: j.lima.nonstop,
+              distance_km: j.main.km,
+              nonstop: j.main.nonstop,
               stops: j.stops,
-              airborne: hoursLabel(j.lima.airborneHours + j.hop.airborneHours),
+              airborne: hoursLabel(j.main.airborneHours + (j.hop?.airborneHours ?? 0)),
               door_to_door: hoursLabel(j.totalHours),
-              breakdown:
-                'International leg, a Lima connection (2.5 h for immigration and a domestic recheck), the ~1 h hop to Trujillo, then 1.5 h by road up the coast.',
+              summary: j.summary,
             }
           : null,
-        routes,
-        advice:
-          'The through-booking to TRU is simplest because the airline owns the connection. Splitting at Lima is often cheaper but the missed-connection risk becomes yours.',
+        routes: routeOptions(origin, stay.depart, stay.return),
       })
     }
 
     case 'arrivals_board': {
-      const crew = await listAttendees()
-      const runs = groupShuttles(crew)
+      const guests = await listGuests()
+      const runs = groupTransfers(guests)
       return text({
-        airport: `${AIRPORTS.arrival.iata} / ${AIRPORTS.arrival.icao}, ${AIRPORTS.arrival.city}`,
-        transfer: `${TRIP.venue.transferKm} km, about ${TRIP.venue.transferHours} hours`,
-        shuttle_runs: runs.map((run, i) => ({
-          van: i + 1,
-          leaves_airport_peru_time: run.departsAt.toLocaleString('en-GB', {
-            timeZone: 'America/Lima',
-          }),
-          riders: run.riders.map((r) => ({
-            name: r.nickname || r.name,
-            flight: r.arrival_flight,
-            lands: r.arrival_at
-              ? new Date(r.arrival_at).toLocaleString('en-GB', { timeZone: 'America/Lima' })
-              : null,
+        airport: say(WEDDING.travel.arrival.iata),
+        rule: 'Anyone landing within two hours of each other shares a car.',
+        cars: runs.map((run, i) => ({
+          car: i + 1,
+          leaves: venueTime(run.departsAt.toISOString()),
+          seats: seats(run.riders),
+          riders: run.riders.map((g) => ({
+            name: g.name,
+            flight: g.arrival_flight,
+            lands: venueTime(g.arrival_at),
+            party_size: headcount(g),
           })),
         })),
-        without_flights: crew
-          .filter((a) => a.status !== 'out' && !a.arrival_at)
-          .map((a) => a.nickname || a.name),
+        no_flight_time_yet: guests
+          .filter((g) => g.status !== 'no' && g.origin_airport && !g.arrival_at)
+          .map((g) => g.name),
       })
     }
 
-    case 'trip_budget': {
-      const crew = (await listAttendees()).filter((a) => a.status !== 'out')
+    case 'cost_estimate': {
       const a = {
         ...DEFAULTS,
-        occupancy: Math.min(3, Math.max(1, Number(args.occupancy) || DEFAULTS.occupancy)),
-        nights: Math.min(30, Math.max(1, Number(args.nights) || DEFAULTS.nights)),
-        payingIgv: args.paying_igv === true,
+        nights: Number(args.nights) || DEFAULTS.nights,
+        sharing: Number(args.sharing) || DEFAULTS.sharing,
+        roomRate: Number(args.room_rate) || DEFAULTS.roomRate,
+        flight: Number(args.flight) || DEFAULTS.flight,
+        gift: args.gift === undefined ? DEFAULTS.gift : Number(args.gift) || 0,
       }
-      const costs = crew.map((p) =>
-        costFor(
-          {
-            name: p.nickname || p.name,
-            room_pref: p.room_pref,
-            bringing_gear: p.bringing_gear,
-            needs_transfer: p.needs_transfer,
-            flight_cost_usd: p.flight_cost_usd,
-            paid_status: p.paid_status,
-          },
-          a,
-        ),
-      )
-      const ground = costs.reduce((sum, c) => sum + c.onTheGround, 0)
+      const { lines, total } = estimate(a)
       return text({
+        currency: WEDDING.currency.code,
+        assumptions: a,
+        breakdown: lines.map((l) => ({ item: l.label, amount: money(l.amount), note: l.note })),
+        total_per_person: money(total),
         caveat:
-          'These are assumptions, not quotes. The hotel prices by date and the published rates are "from" prices. Get a real group quote before anyone budgets seriously.',
-        assumptions: {
-          nights: a.nights,
-          people_per_room: a.occupancy,
-          room_rates_per_room_per_night: a.roomRates,
-          transfer_round_trip: a.transferUsd,
-          food_per_day: a.foodPerDayUsd,
-          gear_hire_per_day: a.rentalPerDayUsd,
-          extras: a.extrasUsd,
-          paying_igv: a.payingIgv,
-        },
-        per_person_on_the_ground: crew.length ? usd(ground / crew.length) : usd(0),
-        group_on_the_ground: usd(ground),
-        flights_booked_so_far: usd(costs.reduce((s2, c) => s2 + (c.flight ?? 0), 0)),
-        people: costs.map((c) => ({
-          name: c.name,
-          room: usd(c.room),
-          transfer: usd(c.transfer),
-          food: usd(c.food),
-          gear_hire: c.rental ? usd(c.rental) : null,
-          extras: usd(c.extras),
-          on_the_ground: usd(c.onTheGround),
-          flight: c.flight == null ? 'not booked' : usd(c.flight),
-          total: c.total == null ? null : usd(c.total),
-          paid: c.paid,
-        })),
-        biggest_lever:
-          'Occupancy. Call this again with occupancy 3 to see what sharing saves — the hotel has triple rooms.',
-        tax_note: `Peru zero-rates its ${Math.round(IGV_RATE * 100)}% IGV on lodging and food for non-resident foreigners staying under 60 days, but you need the passport entry stamp or the digital TAM record from the Migraciones portal. Worth 18% of the largest line here.`,
+          'These are assumptions, not quotes. Say so — a guest deciding whether they can afford this deserves to know which numbers are guesses.',
       })
     }
 
-    case 'how_to_book_the_hotel': {
-      const crew = (await listAttendees()).filter((a) => a.status !== 'out')
+    case 'rsvp': {
+      if (!isDbReady()) return fail('No database configured, so replies cannot be saved yet.')
+      const row = await saveGuest(args as Record<string, unknown>)
+      const guest = await getByToken(row.edit_token)
       return text({
-        headline:
-          'Do not book individually. The hotel handles groups through a separate reservations channel with its own payments schedule; twelve separate online bookings means no group rate, no guarantee the rooms are together, and a real risk the last few sell out.',
-        how: `One person emails ${HOTEL.groupEmail}, gets a written quote and a payment schedule, and everyone settles with them. The site has a prefilled draft at /hotel.`,
-        contacts: {
-          group_reservations_email: HOTEL.groupEmail,
-          whatsapp: HOTEL.whatsapp,
-          phones: HOTEL.phones,
-          online_engine: `${HOTEL.bookingEngine} (individuals only)`,
+        saved: true,
+        edit_token: row.edit_token,
+        keep_this: 'Pass edit_token back on any later rsvp call to update this person rather than adding a second one.',
+        edit_link: `/rsvp?token=${row.edit_token}`,
+        guest: guest && {
+          name: guest.name,
+          status: guest.status,
+          coming_to: guest.attending_events,
+          party_size: headcount(guest),
         },
-        ask_for: [
-          'A group rate and a held block of rooms',
-          'Triple rooms — the biggest single lever on cost per head',
-          'The IGV exemption applied to the quote',
-          'The payment schedule and deposit deadline in writing',
-          `Shared airport transfers from TRU for ${crew.filter((a) => a.needs_transfer).length || crew.length} people, grouped by arrival time`,
-          'Hydrofoil hire and tow-back rates',
-        ],
-        terms: [
-          'Group bookings get a payments schedule rather than a single charge',
-          'One postponement allowed within the year the booking was made',
-          'Refund fees around US$40 abroad / US$25 within Peru, deducted from prepayments',
-          'Rates quoted in USD and may move with the exchange rate or season — get the quote dated',
-        ],
-        rooms_available: TRIP.venue.rooms,
-      })
-    }
-
-    case 'join_trip': {
-      if (!isDbReady()) return fail('The trip database is not configured yet.')
-      try {
-        const row = await saveAttendee(args)
-        const votes = await listVotes()
-        return text({
-          ok: true,
-          id: row.id,
-          edit_token: row.edit_token,
-          important:
-            'Keep this edit_token. Pass it back on any future join_trip or vote_weeks call for this person, or you will create a duplicate.',
-          edit_link: `/me?token=${row.edit_token}`,
-          leading_week: tallyWeeks(votes)[0]?.label ?? null,
-        })
-      } catch (e) {
-        return fail(e instanceof Error ? e.message : 'Could not save.')
-      }
-    }
-
-    case 'vote_weeks': {
-      if (!isDbReady()) return fail('The trip database is not configured yet.')
-      const token = String(args.edit_token ?? '')
-      const person = token ? await getByToken(token) : null
-      if (!person) return fail('No one matches that edit_token. Call join_trip first.')
-
-      const raw = (args.votes ?? {}) as Json
-      const bad = Object.entries(raw).filter(
-        ([k, v]) => !weekByKey(k) || !VOTES.includes(v as never),
-      )
-      if (bad.length) {
-        return fail(
-          `Unusable votes: ${bad.map(([k, v]) => `${k}=${v}`).join(', ')}. ` +
-            `Week keys are ${PROPOSED_WEEKS.map((w) => w.key).join(', ')} and votes are ${VOTES.join(', ')}.`,
-        )
-      }
-
-      await saveVotes(person.id, raw)
-      return text({
-        ok: true,
-        voted_as: person.nickname || person.name,
-        tally: tallyWeeks(await listVotes()).map((w) => ({
-          week: w.label,
-          yes: w.yes,
-          maybe: w.maybe,
-          no: w.no,
-        })),
       })
     }
 
@@ -513,7 +409,7 @@ async function callTool(name: string, args: Json) {
   }
 }
 
-// -------------------------------------------------------------- JSON-RPC plumbing
+// ------------------------------------------------------------------ transport
 
 const rpcResult = (id: unknown, result: unknown) => ({ jsonrpc: '2.0', id, result })
 const rpcError = (id: unknown, code: number, message: string) => ({
@@ -531,12 +427,15 @@ async function handleMessage(message: Json) {
         protocolVersion:
           typeof params?.protocolVersion === 'string' ? params.protocolVersion : PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'chicama', version: '1.0.0' },
+        serverInfo: { name: 'wedding', version: '1.0.0' },
         instructions:
-          'The trip site for a bachelor party at Chicama, Peru. Read with trip_overview and ' +
-          'proposed_weeks first. To add someone, call join_trip and keep the edit_token it ' +
-          'returns — pass it back on later calls so you update that person instead of ' +
-          'duplicating them. All times are Peru local (UTC-5, no daylight saving).',
+          'The wedding site for ' +
+          (real(WEDDING.couple.joined) ?? 'this couple') +
+          '. Call wedding_overview first — it says what has actually been decided. Anything it ' +
+          'reports as not decided really is not decided: say so rather than inventing it. To ' +
+          'reply to the invitation call rsvp and KEEP the edit_token it returns, passing it back ' +
+          'on later calls so you update that guest instead of duplicating them. Times are local ' +
+          'to the venue.',
       })
 
     case 'tools/list':
@@ -572,7 +471,14 @@ async function handleMessage(message: Json) {
 export async function POST(request: Request) {
   if (!authorized(request)) {
     return Response.json(
-      { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized. Pass the trip passphrase as a Bearer token or ?key=' } },
+      {
+        jsonrpc: '2.0',
+        id: null,
+        error: {
+          code: -32001,
+          message: 'Unauthorized. Pass the site passphrase as a Bearer token or ?key=',
+        },
+      },
       { status: 401, headers: { 'WWW-Authenticate': 'Bearer' } },
     )
   }

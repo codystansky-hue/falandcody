@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 
 type Journey = {
-  toLimaKm: number
-  toLimaNonstop: boolean
+  mainTo: string
+  mainKm: number
+  nonstop: boolean
+  hopTo: string | null
   hopKm: number
   roadKm: number
   stops: number
@@ -13,25 +15,17 @@ type Journey = {
   summary: string
 }
 
-type Price = {
-  weekKey: string
-  label: string
-  cheapestUsd: number | null
-  airline: string | null
-  transfers: number | null
-}
-
 export type JourneyData = {
   origin: { iata: string; name: string; city: string; country: string }
   journey: Journey
-  pricesConfigured: boolean
-  prices: Price[] | null
+  stay: { depart: string; return: string; nights: number } | null
+  price: { cheapestUsd: number | null; stale: boolean; fetchedAt: string | null } | null
 }
 
 /**
- * What the trip from someone's own airport actually looks like — resolved
- * airport, distance, stops and door-to-door time, plus the cheapest fare per
- * proposed week when the fare token is set.
+ * What the trip from one guest's own airport actually looks like — resolved
+ * airport, distance, stops, door-to-door time, and a live fare for the dates
+ * they would actually be travelling.
  *
  * Fetched rather than computed in the browser: the airport table is 300 KB and
  * belongs on the server.
@@ -84,22 +78,16 @@ export default function JourneyPanel({
   data,
   loading,
   error,
-  highlightWeek,
 }: {
   data: JourneyData | null
   loading: boolean
   error: string | null
-  highlightWeek?: string
 }) {
-  if (loading) return <p className="text-sm text-slate2">Looking that up…</p>
-  if (error) return <p className="text-sm text-rust">{error}</p>
+  if (loading) return <p className="text-sm text-muted">Looking that up…</p>
+  if (error) return <p className="text-sm text-rose">{error}</p>
   if (!data) return null
 
-  const { origin, journey, prices, pricesConfigured } = data
-  const cheapest = prices?.filter((p) => p.cheapestUsd != null) ?? []
-  const best = cheapest.length
-    ? cheapest.reduce((a, b) => ((b.cheapestUsd ?? 0) < (a.cheapestUsd ?? 0) ? b : a))
-    : null
+  const { origin, journey, stay, price } = data
 
   return (
     <div className="space-y-4">
@@ -108,7 +96,7 @@ export default function JourneyPanel({
           <span className="mono">{origin.iata}</span> — {origin.name}
           {origin.city && origin.city !== origin.name ? `, ${origin.city}` : ''} ({origin.country})
         </p>
-        <p className="text-sm text-slate2 mt-0.5">{journey.summary}</p>
+        <p className="text-sm text-muted mt-0.5">{journey.summary}</p>
       </div>
 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -125,58 +113,32 @@ export default function JourneyPanel({
           <dd className="mono text-lg">{journey.stops}</dd>
         </div>
         <div>
-          <dt className="label mb-0.5">To Lima</dt>
-          <dd className="mono text-lg">{journey.toLimaKm.toLocaleString()} km</dd>
+          <dt className="label mb-0.5">To {journey.mainTo}</dt>
+          <dd className="mono text-lg">{journey.mainKm.toLocaleString()} km</dd>
         </div>
       </dl>
 
-      {pricesConfigured ? (
-        cheapest.length > 0 ? (
-          <div>
-            <p className="label mb-1.5">Cheapest fare, by week</p>
-            <ul className="text-sm divide-y divide-hairline border-t border-hairline">
-              {prices!.map((price) => (
-                <li
-                  key={price.weekKey}
-                  className={
-                    'flex justify-between py-2 ' +
-                    (price.weekKey === highlightWeek ? 'font-medium' : '')
-                  }
-                >
-                  <span>
-                    {price.label}
-                    {price.weekKey === highlightWeek && <span className="marker ml-2">yours</span>}
-                  </span>
-                  <span className="mono">
-                    {price.cheapestUsd == null ? (
-                      <span className="text-slate2">no cached fare</span>
-                    ) : (
-                      <>
-                        ${price.cheapestUsd.toFixed(0)}
-                        {price.weekKey === best?.weekKey && cheapest.length > 1 && (
-                          <span className="text-ochre text-xs ml-2">cheapest</span>
-                        )}
-                      </>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-slate2 mt-2">
-              Cheapest round trip to Lima, live from Google Flights. Indicative — click through to
-              confirm what is actually bookable.
-            </p>
-          </div>
-        ) : (
-          <p className="text-xs text-slate2">
-            No price came back for this route just now. The search buttons still work, and reloading
-            usually fixes it.
+      {stay && (
+        <div>
+          <p className="label mb-1.5">
+            Cheapest round trip · {stay.depart} → {stay.return}
           </p>
-        )
-      ) : (
-        <p className="text-xs text-slate2">
-          No price came back this time — the source is intermittent. Reload and it usually appears.
-        </p>
+          {price?.cheapestUsd != null ? (
+            <>
+              <p className="mono text-2xl">${price.cheapestUsd.toFixed(0)}</p>
+              <p className="text-xs text-muted mt-1.5">
+                {price.stale
+                  ? 'Last price we managed to fetch for this route — it may have moved.'
+                  : 'Live, and indicative. Click through to see what is actually bookable.'}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-muted">
+              No price came back for this route just now — the source is intermittent rather than
+              broken. The search buttons below still work, and reloading usually fixes it.
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { AIRPORTS } from './config'
+import { FARE_DEST } from './config'
 
 // Port of the workflow's "Apify Flights" + "Pick cheapest" nodes. Apify's
 // scrapers are metered per run; Amadeus Self-Service — the obvious free
@@ -33,7 +33,7 @@ export async function cheapestFrom(
   const token = process.env.TRAVELPAYOUTS_TOKEN
   if (!token) return null
 
-  const destination = opts.destination ?? AIRPORTS.gateway.iata
+  const destination = opts.destination ?? FARE_DEST
   const params = new URLSearchParams({
     origin: origin.toUpperCase(),
     destination,

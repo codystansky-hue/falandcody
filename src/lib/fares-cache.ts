@@ -1,7 +1,7 @@
 import { db, isDbReady } from './db'
 import { cheapestRoundTrip } from './googleFlights'
 import { cheapestFrom, isFaresConfigured } from './fares'
-import { AIRPORTS } from './config'
+import { FARE_DEST } from './config'
 
 // Google's page is intermittent — about one miss in three on rapid repeats —
 // so every success is written to fare_snapshots, and a miss falls back to the
@@ -45,7 +45,7 @@ export async function cachedFare(origin: string, depart: string): Promise<Cached
   if (!isDbReady()) return null
   const rows = (await db()`
     select price_usd, fetched_at, airline from fare_snapshots
-    where origin = ${origin} and dest = ${AIRPORTS.gateway.iata} and depart_date = ${depart}
+    where origin = ${origin} and dest = ${FARE_DEST} and depart_date = ${depart}
     order by fetched_at desc limit 1
   `) as Row[]
   return shape(rows[0])
@@ -55,7 +55,7 @@ async function store(origin: string, depart: string, usd: number, source: string
   if (!isDbReady()) return
   await db()`
     insert into fare_snapshots (origin, dest, depart_date, price_usd, airline, transfers)
-    values (${origin}, ${AIRPORTS.gateway.iata}, ${depart}, ${usd}, ${source}, null)
+    values (${origin}, ${FARE_DEST}, ${depart}, ${usd}, ${source}, null)
   `
 }
 
@@ -68,7 +68,7 @@ export async function fareFor(
   const cached = await cachedFare(origin, depart)
   if (cached && !cached.stale) return cached
 
-  const live = await cheapestRoundTrip(origin, AIRPORTS.gateway.iata, depart, ret)
+  const live = await cheapestRoundTrip(origin, FARE_DEST, depart, ret)
   if (live) {
     await store(origin, depart, live.cheapestUsd, 'google')
     return { usd: live.cheapestUsd, fetchedAt: live.fetchedAt, stale: false, source: 'google' }
@@ -79,7 +79,7 @@ export async function fareFor(
   if (isFaresConfigured()) {
     const fares = await cheapestFrom(origin, {
       departureMonth: depart.slice(0, 7),
-      destination: AIRPORTS.gateway.iata,
+      destination: FARE_DEST,
     })
     if (fares?.length) {
       const best = fares.reduce((a, b) => (b.priceUsd < a.priceUsd ? b : a)).priceUsd

@@ -4,8 +4,11 @@
 
 export type Scope = 'guest' | 'admin'
 
-export const GUEST_COOKIE = 'chicama_gate'
-export const ADMIN_COOKIE = 'chicama_admin'
+export const GUEST_COOKIE = 'wedding_gate'
+// Not a gate cookie: this one remembers WHICH guest a browser is, so returning
+// to /rsvp edits their reply instead of adding a second one.
+export const EDIT_COOKIE = 'wedding_guest'
+export const ADMIN_COOKIE = 'wedding_admin'
 const MAX_AGE_SECONDS = 90 * 24 * 60 * 60
 
 const enc = new TextEncoder()

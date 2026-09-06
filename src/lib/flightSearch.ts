@@ -2,11 +2,11 @@ import { AIRPORTS } from './config'
 
 // Zero-friction flight search: hand the airport code and the dates straight to
 // a real search engine as a prefilled URL. No key, no account, no cached-fare
-// API — one click and you are looking at live prices for your own route.
+// API — one click and the guest is looking at live prices for their own route,
+// on the right dates, without having typed a thing.
 //
-// This is deliberately separate from src/lib/fares.ts. That one needs a
-// Travelpayouts token and shows indicative cached prices; this one always
-// works and is what the page leads with.
+// Deliberately separate from src/lib/fares.ts and googleFlights.ts, which
+// produce a number. This always works and is what the page leads with.
 
 export type SearchLink = { name: string; url: string }
 
@@ -36,29 +36,45 @@ export function searchLinks(origin: string, depart: string, ret: string, dest: s
   ]
 }
 
+export type RouteOption = { key: string; label: string; note: string; links: SearchLink[] }
+
 /**
- * Two ways to get there, and people who have not been to Peru rarely know the
- * second one exists:
- *   through — one booking all the way to Trujillo, the connection handled for you
- *   split   — international to Lima, then the LIM–TRU hop bought separately,
- *             which is often cheaper but puts the missed-connection risk on you
+ * The ways in. When the venue sits behind a gateway hub there are two, and
+ * guests who have never made the trip rarely know the second one exists:
+ *
+ *   through — one booking all the way in, the connection handled for you
+ *   split   — the long leg bought separately from the final hop, which is
+ *             often cheaper but puts the missed-connection risk on you
  */
-export function routeOptions(origin: string, depart: string, ret: string) {
-  return {
-    through: {
-      label: `${origin.toUpperCase()} → ${AIRPORTS.arrival.iata}`,
-      note: 'One booking, connection included. Simplest, and the airline owns the connection.',
-      links: searchLinks(origin, depart, ret, AIRPORTS.arrival.iata),
-    },
-    toLima: {
-      label: `${origin.toUpperCase()} → ${AIRPORTS.gateway.iata}`,
-      note: 'International leg only. Often cheaper, but you own the connection.',
-      links: searchLinks(origin, depart, ret, AIRPORTS.gateway.iata),
-    },
-    limaHop: {
-      label: `${AIRPORTS.gateway.iata} → ${AIRPORTS.arrival.iata}`,
-      note: 'The domestic hop, about an hour. LATAM and Sky both fly it several times a day.',
-      links: searchLinks(AIRPORTS.gateway.iata, depart, ret, AIRPORTS.arrival.iata),
-    },
+export function routeOptions(origin: string, depart: string, ret: string): RouteOption[] {
+  const o = origin.toUpperCase()
+  const arrival = AIRPORTS.arrival.iata
+  const gateway = AIRPORTS.gateway
+
+  const through: RouteOption = {
+    key: 'through',
+    label: `${o} → ${arrival}`,
+    note: gateway
+      ? 'One booking, connection included. Simplest, and the airline owns the connection.'
+      : 'One booking, straight in.',
+    links: searchLinks(o, depart, ret, arrival),
   }
+
+  if (!gateway) return [through]
+
+  return [
+    through,
+    {
+      key: 'gateway',
+      label: `${o} → ${gateway.iata}`,
+      note: 'The long leg only. Often cheaper, but you own the connection.',
+      links: searchLinks(o, depart, ret, gateway.iata),
+    },
+    {
+      key: 'hop',
+      label: `${gateway.iata} → ${arrival}`,
+      note: `The hop from ${gateway.city}, bought separately.`,
+      links: searchLinks(gateway.iata, depart, ret, arrival),
+    },
+  ]
 }

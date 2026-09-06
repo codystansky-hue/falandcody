@@ -1,202 +1,220 @@
 import Link from 'next/link'
-import PointBreak, { type Rider } from '@/components/PointBreak'
-import CaptainAvatar from '@/components/CaptainAvatar'
-import SwellMap from '@/components/SwellMap'
-import { Notice, Stat } from '@/components/ui'
-import { TRIP } from '@/lib/config'
-import { listAttendees } from '@/lib/attendees'
-import { compass, getForecast, metresToFeet, type SwellDay } from '@/lib/swell'
+import { Notice, Stat, Todo } from '@/components/ui'
+import {
+  WEDDING,
+  eventDate,
+  formatDate,
+  real,
+  weddingDate,
+} from '@/lib/config'
+import { listGuests, tally } from '@/lib/guests'
+import { registryReady } from '@/lib/nav'
 
-// Reads the roster, so it renders per request. The forecast underneath is
-// still cached for an hour at the fetch layer.
+// Reads the guest list, so it renders per request.
 export const dynamic = 'force-dynamic'
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
+function daysUntil(date: Date) {
+  const today = new Date()
+  const midnight = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  return Math.round((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - midnight) / 86_400_000)
 }
 
 export default async function Home() {
-  const attendees = await listAttendees()
+  const guests = await listGuests()
+  const counts = tally(guests)
 
-  let forecast: SwellDay[] | null = null
-  try {
-    forecast = await getForecast(5)
-  } catch {
-    forecast = null
-  }
-  const today = forecast?.[0] ?? null
-  const best = forecast?.reduce((a, b) => (b.score > a.score ? b : a), forecast[0]) ?? null
+  const date = weddingDate()
+  const dateSettled = date !== null && WEDDING.date.confirmed
+  const days = date ? daysUntil(date) : null
 
-  const riders: Rider[] = attendees.map((a) => ({
-    id: a.id,
-    initials: initials(a.nickname || a.name),
-    label: `${a.name}${a.origin_city ? ` — ${a.origin_city}` : ''}`,
-    tone: a.status === 'out' ? 'out' : a.status === 'maybe' ? 'maybe' : 'in',
-  }))
-
-  const inCount = attendees.filter((a) => a.status === 'in').length
+  const names = real(WEDDING.couple.joined)
+  const venue = real(WEDDING.venue.name)
+  const town = real(WEDDING.venue.town)
+  const rsvpBy = real(WEDDING.date.rsvpBy)
 
   return (
     <div className="max-w-page mx-auto px-6">
-      <section className="pt-14 md:pt-20 relative pb-28 sm:pb-32">
-        <p className="marker mb-4">
-          8°04′S 79°26′W · {TRIP.venue.town}
+      <section className="pt-14 md:pt-24 pb-4">
+        <p className="marker mb-5">
+          {town ?? <Todo what="Venue town not set" path="venue.town" />}
         </p>
-        <h1 className="display text-[15vw] leading-[0.82] md:text-[9rem] mb-6">
-          THE LONGEST
-          <br />
-          LEFT ON EARTH
+
+        <h1 className="display text-[13vw] leading-[0.95] md:text-[7.5rem] mb-6">
+          {names ?? (
+            <span className="text-muted">
+              {WEDDING.couple.one.name} &amp; …
+            </span>
+          )}
         </h1>
-        <p className="text-lg text-slate2 max-w-xl">
-          Two and a half kilometres of wave, one point, and however many of us can get there. Put
-          your details in and the rest of it — flights, transfers, rooms — assembles itself.
+
+        <p className="text-xl md:text-2xl text-muted max-w-2xl">
+          {dateSettled ? (
+            <>
+              We are getting married on{' '}
+              <span className="text-ink">{real(WEDDING.date.label) ?? formatDate(date!)}</span>
+              {venue && (
+                <>
+                  {' '}at <span className="text-ink">{venue}</span>
+                </>
+              )}
+              . We would love you there.
+            </>
+          ) : (
+            <>
+              We are getting married. The date and the place are nearly settled — this page is
+              where everything will land, so keep the link.
+            </>
+          )}
         </p>
-        <p className="mono text-sm text-slate2 mt-3">{TRIP.window.label}</p>
-        <div className="flex flex-wrap gap-3 mt-8">
-          <Link href="/me" className="btn">
-            Add your details
+
+        <div className="flex flex-wrap gap-3 mt-9">
+          <Link href="/rsvp" className="btn">
+            {dateSettled ? 'RSVP' : 'Leave us your details'}
           </Link>
-          <Link href="/roster" className="btn btn-quiet">
-            See who&rsquo;s in
+          <Link href="/schedule" className="btn btn-quiet">
+            The weekend
           </Link>
         </div>
 
-        {/* Captain, ported from the portfolio site. He patrols the sand under
-            the hero — walks to your cursor, sits when you stop, flops if you
-            leave him alone, hops when clicked. */}
-        <CaptainAvatar />
-      </section>
-
-      {/* The crew, spread down the point in the order they land. */}
-      <section className="mt-16 md:mt-24">
-        <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
-          <p className="marker">The point · {riders.length ? `${riders.length} on it` : 'empty'}</p>
-          <p className="marker">Malpaso → El Hombre · 2.2 km</p>
-        </div>
-        {riders.length > 0 ? (
-          <PointBreak riders={riders} />
-        ) : (
-          <div className="card p-10 text-center">
-            <p className="display text-2xl mb-2">Nobody on it yet</p>
-            <p className="text-slate2 text-sm mb-5">
-              The first name in goes furthest down the point.
-            </p>
-            <Link href="/me" className="btn">
-              Be first
-            </Link>
+        {dateSettled && days !== null && (
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mt-12">
+            <Stat
+              label={days >= 0 ? 'Days to go' : 'Married for'}
+              value={Math.abs(days)}
+              sub={real(WEDDING.date.label) ?? undefined}
+            />
+            <Stat
+              label="Replies in"
+              value={counts.replied}
+              sub={`${counts.yes} yes · ${counts.maybe} maybe · ${counts.no} no`}
+            />
+            <Stat label="Coming" value={counts.heads} sub="Including plus-ones and children" />
+            <Stat
+              label="RSVP by"
+              value={rsvpBy ? formatDate(new Date(`${rsvpBy}T12:00:00Z`), { weekday: undefined, year: undefined }) : '—'}
+              sub={rsvpBy ? 'After that we have to give the caterer a number' : 'Not set yet'}
+            />
           </div>
         )}
       </section>
 
+      {/* The weekend, at a glance. Reads WEDDING.events, so adding a Sunday
+          hike to the config puts it here automatically. */}
       <section className="mt-16 md:mt-24">
-        <p className="marker mb-4">Right now at the point</p>
-        {today ? (
-          <>
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              <Stat
-                label="Swell"
-                value={`${metresToFeet(today.swellM)?.toFixed(1) ?? '—'} ft`}
-                sub={today.swellM != null ? `${today.swellM.toFixed(2)} m` : undefined}
-              />
-              <Stat label="Period" value={`${today.periodS?.toFixed(0) ?? '—'} s`} sub="Long is what wraps the point" />
-              <Stat
-                label="Direction"
-                value={compass(today.dirDeg)}
-                sub={today.dirDeg != null ? `${today.dirDeg.toFixed(0)}°` : undefined}
-              />
-              <Stat
-                label="Wind"
-                value={`${today.windKmh?.toFixed(0) ?? '—'} km/h`}
-                sub={`from ${compass(today.windDirDeg)}`}
-              />
-            </div>
-            {best && (
-              <p className="mt-4 text-sm text-slate2">
-                Best of the next five days is{' '}
-                <span className="mono text-ink">
-                  {new Date(best.day + 'T12:00:00').toLocaleDateString('en-GB', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </span>{' '}
-                — {best.verdict}.{' '}
-                <Link href="/swell" className="underline underline-offset-2 hover:text-ink">
-                  Full forecast
-                </Link>
-              </p>
-            )}
-          </>
-        ) : (
-          <Notice title="Forecast unreachable">
-            <p>Open-Meteo did not answer. It needs no key, so this is temporary — reload shortly.</p>
-          </Notice>
-        )}
-      </section>
-
-      <section className="mt-16 md:mt-24">
-        <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-          <p className="marker">Where the swell is</p>
-          <p className="marker">8°04′S 79°26′W</p>
+        <div className="flex items-baseline justify-between mb-5 flex-wrap gap-2">
+          <p className="marker">The weekend</p>
+          <Link href="/schedule" className="marker hover:text-ink">
+            Full schedule →
+          </Link>
         </div>
-        <SwellMap />
+        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {WEDDING.events.map((event) => {
+            const when = eventDate(event)
+            return (
+              <li key={event.key} className="card p-5">
+                <p className="marker mb-2">
+                  {when ? formatDate(when, { year: undefined }) : 'Date to come'}
+                </p>
+                <h2 className="display text-xl mb-1.5">{event.name}</h2>
+                <p className="mono text-sm text-muted">
+                  {real(event.time) ?? <Todo what="Time to come" />}
+                </p>
+                <p className="text-sm text-muted mt-1">
+                  {real(event.where) ?? <Todo what="Place to come" />}
+                </p>
+              </li>
+            )
+          })}
+        </ol>
       </section>
 
-      <section className="mt-16 md:mt-24 grid gap-6 md:grid-cols-2">
+      <section className="mt-16 md:mt-24 grid gap-10 md:grid-cols-2">
         <div>
-          <p className="marker mb-4">Where we stay</p>
-          <h2 className="display text-3xl mb-3">{TRIP.venue.name}</h2>
-          <p className="text-slate2 mb-5">
-            {TRIP.venue.rooms.reduce((n, r) => n + r.count, 0)} rooms above the bay, a board room for
-            the gear, and a tow-back boat for when the paddle back up the point stops being funny.
+          <p className="marker mb-4">Where</p>
+          <h2 className="display text-3xl mb-3">
+            {venue ?? <Todo what="Venue not chosen yet" path="venue.name" />}
+          </h2>
+          <p className="text-muted mb-5">
+            {real(WEDDING.venue.note) ??
+              'Once the venue is booked, the description goes in config.ts and appears here.'}
           </p>
           <dl className="text-sm divide-y divide-hairline border-t border-hairline">
-            {TRIP.venue.rooms.map((room) => (
-              <div key={room.key} className="flex justify-between py-2.5">
-                <dt>
-                  {room.label} <span className="text-slate2">×{room.count}</span>
-                </dt>
-                <dd className="mono">from ${room.fromUsd}</dd>
+            {real(WEDDING.venue.address) && (
+              <div className="flex justify-between gap-6 py-2.5">
+                <dt className="text-muted shrink-0">Address</dt>
+                <dd className="text-right">{WEDDING.venue.address}</dd>
               </div>
-            ))}
-            <div className="flex justify-between py-2.5">
-              <dt>Transfer from {TRIP.venue.transferFrom}</dt>
-              <dd className="mono">
-                {TRIP.venue.transferKm} km · {TRIP.venue.transferHours} h
-              </dd>
-            </div>
+            )}
+            {WEDDING.travel.flyIn && real(WEDDING.travel.arrival.city) && (
+              <div className="flex justify-between gap-6 py-2.5">
+                <dt className="text-muted shrink-0">Nearest airport</dt>
+                <dd className="mono text-right">
+                  {WEDDING.travel.arrival.city}
+                  {real(WEDDING.travel.arrival.iata) ? ` · ${WEDDING.travel.arrival.iata}` : ''}
+                </dd>
+              </div>
+            )}
+            {WEDDING.travel.transferHours > 0 && (
+              <div className="flex justify-between gap-6 py-2.5">
+                <dt className="text-muted shrink-0">From the airport</dt>
+                <dd className="mono text-right">
+                  {WEDDING.travel.transferKm} km · {WEDDING.travel.transferHours} h
+                </dd>
+              </div>
+            )}
           </dl>
-          <a
-            href={TRIP.venue.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block mt-5 text-sm underline underline-offset-2"
-          >
-            chicamaboutiquehotel.com
-          </a>
+          {real(WEDDING.venue.url) && (
+            <a
+              href={WEDDING.venue.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block mt-5 text-sm underline underline-offset-2"
+            >
+              {WEDDING.venue.url.replace(/^https?:\/\//, '')}
+            </a>
+          )}
         </div>
 
         <div>
-          <p className="marker mb-4">Where we are up to</p>
+          <p className="marker mb-4">Before you book anything</p>
           <div className="space-y-3">
-            <Stat label="In" value={inCount} sub={`${attendees.length} replies so far`} />
-            <Notice title={TRIP.window.locked ? 'Dates are locked' : 'Dates are not locked yet'}>
+            <Notice title={dateSettled ? 'Reply when you can' : 'Nothing is locked yet'}>
               <p>
-                {TRIP.window.locked
-                  ? `We go ${TRIP.window.label}.`
-                  : `The window is ${TRIP.window.label}. October and November are the strongest of it — add the weeks you can actually get away and the overlap will pick the date.`}
+                {dateSettled
+                  ? `Tell us yes or no${rsvpBy ? ` by ${rsvpBy}` : ''}. You can change your answer afterwards — the form remembers you and edits your reply rather than adding a second one.`
+                  : 'Leave your name and email now and we will write to you the moment the date is fixed. Nothing you enter is final.'}
               </p>
               <p>
-                <Link href="/dates" className="underline underline-offset-2 text-ink">
-                  Add your weeks
+                <Link href="/rsvp" className="underline underline-offset-2 text-ink">
+                  Go to the form
                 </Link>
               </p>
             </Notice>
+
+            {WEDDING.travel.flyIn && (
+              <Notice title="Flying in?">
+                <p>
+                  Put your home airport into the RSVP form and it works out the journey, the dates
+                  you would want to fly, and what the fare looks like — no separate search.
+                </p>
+                <p>
+                  <Link href="/travel" className="underline underline-offset-2 text-ink">
+                    Travel
+                  </Link>
+                </p>
+              </Notice>
+            )}
+
+            {registryReady() && (
+              <Notice title="On presents">
+                <p>{real(WEDDING.registry.note) ?? 'Your presence is the present.'}</p>
+                <p>
+                  <Link href="/registry" className="underline underline-offset-2 text-ink">
+                    Registry
+                  </Link>
+                </p>
+              </Notice>
+            )}
           </div>
         </div>
       </section>

@@ -74,9 +74,16 @@ export async function recentArrivals(icao: string, hoursBack = 24): Promise<Arri
   }
 }
 
-export async function arrivalsAtTrujillo(hoursBack = 24) {
-  return recentArrivals(AIRPORTS.arrival.icao, hoursBack)
+// Tracking needs the ICAO code of the arrival airport (four letters, e.g.
+// KSEA). It is optional in the config, so this returns null rather than
+// querying with an empty string when it is not set.
+export async function arrivalsAtVenueAirport(hoursBack = 24) {
+  const icao = AIRPORTS.arrival.icao
+  if (!/^[A-Z]{4}$/.test(icao)) return null
+  return recentArrivals(icao, hoursBack)
 }
+
+export const hasArrivalIcao = () => /^[A-Z]{4}$/.test(AIRPORTS.arrival.icao)
 
 // A flight number as people write it ("LA2261", "LA 2261") against an OpenSky
 // callsign ("LAN2261"). Compare on the digits plus a loose carrier match, since

@@ -1,73 +1,97 @@
-import { Page, Stat } from '@/components/ui'
-import { listAttendees, passportRisk } from '@/lib/attendees'
-import { GEAR_ITEMS, TRIP } from '@/lib/config'
+import { Notice, Page, Stat } from '@/components/ui'
+import { headcountFor, listGuests, passportRisk, tally } from '@/lib/guests'
+import { STAY_OPTIONS, WEDDING, outstanding } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Organiser — Chicama' }
+export const metadata = { title: 'Organiser' }
 
 export default async function AdminPage() {
-  const attendees = await listAttendees()
-  const going = attendees.filter((a) => a.status !== 'out')
+  const guests = await listGuests()
+  const counts = tally(guests)
+  const coming = guests.filter((g) => g.status !== 'no')
 
-  const rooms = TRIP.venue.rooms.map((room) => ({
-    ...room,
-    wanted: going.filter((a) => a.room_pref === room.key).length,
+  const dietary = coming.filter((g) => g.dietary)
+  const songs = guests.filter((g) => g.song_request)
+  const addresses = guests.filter((g) => g.postal_address)
+  const noContact = guests.filter((g) => !g.email && !g.phone)
+
+  const passportShort = coming.filter((g) => passportRisk(g.passport_expiry) === 'short')
+  const passportMissing =
+    WEDDING.travel.passportMonthsRequired > 0 ? coming.filter((g) => !g.passport_expiry) : []
+
+  const stays = STAY_OPTIONS.map((option) => ({
+    ...option,
+    count: coming.filter((g) => g.stay_pref === option.key).length,
   }))
-  const noPreference = going.filter((a) => !a.room_pref || a.room_pref === 'any').length
 
-  const rentals = going.filter((a) => a.rental_needed)
-  const dietary = going.filter((a) => a.dietary)
-  const passportIssues = going.filter(
-    (a) => passportRisk(a.passport_expiry, TRIP.window.end) === 'expired',
-  )
-  const missingPassport = going.filter((a) => !a.passport_expiry)
-  const unpaid = going.filter((a) => a.paid_status === 'unpaid')
-
-  const gearCounts = GEAR_ITEMS.map((item) => ({
-    ...item,
-    count: going.filter((a) => a.bringing_gear.includes(item.key)).length,
-  }))
+  const todos = outstanding()
 
   return (
     <Page
       marker="Organiser"
       title="Everything at once"
-      lede="The whole trip on one screen, and a CSV when you need it somewhere else."
+      lede="The whole thing on one screen, and a CSV when you need it in a spreadsheet."
     >
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-10">
-        <Stat label="Going" value={going.length} sub={`${attendees.length} replies`} />
+        <Stat label="Coming" value={counts.heads} sub={`${counts.yes} replies said yes`} />
         <Stat
-          label="Flights booked"
-          value={going.filter((a) => a.arrival_at).length}
-          sub={`of ${going.length}`}
+          label="If the maybes come"
+          value={counts.headsIfMaybes}
+          sub={`${counts.maybe} still deciding`}
         />
-        <Stat label="On the shuttle" value={going.filter((a) => a.needs_transfer).length} />
-        <Stat label="Not paid" value={unpaid.length} />
+        <Stat label="Children" value={counts.kids} sub="Among the yeses" />
+        <Stat label="Cannot come" value={counts.no} sub={`${counts.replied} replies in total`} />
       </div>
 
       <div className="flex flex-wrap gap-3 mb-12">
         <a href="/api/admin/export" className="btn">
           Download CSV
         </a>
+        <a href="/api/admin/export?what=addresses" className="btn btn-quiet">
+          Addresses only
+        </a>
       </div>
 
-      {(passportIssues.length > 0 || missingPassport.length > 0) && (
+      {/* The setup checklist. Every string in config.ts still marked TODO,
+          listed by its exact path so it can be found in seconds. */}
+      {todos.length > 0 && (
+        <section className="mb-12">
+          <p className="marker mb-3">
+            {todos.length} {todos.length === 1 ? 'thing' : 'things'} still to fill in
+          </p>
+          <Notice title="Placeholders in src/lib/config.ts">
+            <p>
+              Each of these is still a <span className="mono">TODO:</span> string. Guests see an
+              honest &ldquo;not decided yet&rdquo; wherever one appears; delete the prefix and write
+              the real value.
+            </p>
+            <ul className="mono text-xs grid sm:grid-cols-2 gap-x-6 gap-y-1 pt-2">
+              {todos.map((path) => (
+                <li key={path}>{path}</li>
+              ))}
+            </ul>
+          </Notice>
+        </section>
+      )}
+
+      {(passportShort.length > 0 || passportMissing.length > 0) && (
         <section className="mb-12">
           <p className="marker mb-3">Passports</p>
-          <div className="card border-l-2 border-l-rust p-5 text-sm space-y-2">
-            {passportIssues.length > 0 && (
+          <div className="card border-l-2 border-l-rose p-5 text-sm space-y-2">
+            {passportShort.length > 0 && (
               <p>
-                <span className="font-semibold text-rust">
-                  {passportIssues.map((a) => a.nickname || a.name).join(', ')}
+                <span className="font-semibold text-rose">
+                  {passportShort.map((g) => g.name).join(', ')}
                 </span>{' '}
-                {passportIssues.length === 1 ? 'has' : 'have'} under six months of validity past the
-                end of the window. Peru will refuse entry — chase this before anyone books.
+                {passportShort.length === 1 ? 'has' : 'have'} under{' '}
+                {WEDDING.travel.passportMonthsRequired} months of validity past the wedding date.
+                Chase this before they book anything.
               </p>
             )}
-            {missingPassport.length > 0 && (
-              <p className="text-slate2">
-                Not said yet: {missingPassport.map((a) => a.nickname || a.name).join(', ')}.
+            {passportMissing.length > 0 && (
+              <p className="text-muted">
+                Not said yet: {passportMissing.map((g) => g.name).join(', ')}.
               </p>
             )}
           </div>
@@ -76,67 +100,99 @@ export default async function AdminPage() {
 
       <div className="grid gap-10 md:grid-cols-2">
         <section>
-          <p className="marker mb-3">Rooms wanted</p>
+          <p className="marker mb-3">Heads per event</p>
           <dl className="text-sm divide-y divide-hairline border-t border-hairline">
-            {rooms.map((room) => (
-              <div key={room.key} className="flex justify-between py-2.5">
+            {WEDDING.events.map((event) => (
+              <div key={event.key} className="flex justify-between py-2.5">
                 <dt>
-                  {room.label} <span className="text-slate2">({room.count} exist)</span>
+                  {event.name}
+                  {event.optional && <span className="text-muted"> (optional)</span>}
                 </dt>
-                <dd className="mono">{room.wanted}</dd>
+                <dd className="mono">{headcountFor(guests, event.key)}</dd>
               </div>
             ))}
-            <div className="flex justify-between py-2.5">
-              <dt className="text-slate2">No preference</dt>
-              <dd className="mono">{noPreference}</dd>
-            </div>
           </dl>
+          <p className="text-xs text-muted mt-2">
+            Counting plus-ones and children, from the yeses and maybes who ticked each one.
+          </p>
         </section>
 
         <section>
-          <p className="marker mb-3">Gear coming with us</p>
+          <p className="marker mb-3">Where they are sleeping</p>
           <dl className="text-sm divide-y divide-hairline border-t border-hairline">
-            {gearCounts.map((item) => (
-              <div key={item.key} className="flex justify-between py-2.5">
-                <dt>{item.label}</dt>
-                <dd className="mono">{item.count}</dd>
+            {stays.map((stay) => (
+              <div key={stay.key} className="flex justify-between py-2.5">
+                <dt>{stay.label}</dt>
+                <dd className="mono">{stay.count}</dd>
               </div>
             ))}
           </dl>
-        </section>
-
-        <section>
-          <p className="marker mb-3">Rentals to arrange</p>
-          {rentals.length === 0 ? (
-            <p className="text-sm text-slate2">Nobody has asked for rental gear.</p>
-          ) : (
-            <ul className="text-sm divide-y divide-hairline border-t border-hairline">
-              {rentals.map((a) => (
-                <li key={a.id} className="py-2.5">
-                  <span className="font-medium">{a.nickname || a.name}</span>
-                  <span className="text-slate2"> — {a.rental_needed}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </section>
 
         <section>
           <p className="marker mb-3">Kitchen needs to know</p>
           {dietary.length === 0 ? (
-            <p className="text-sm text-slate2">Nothing flagged.</p>
+            <p className="text-sm text-muted">Nothing flagged.</p>
           ) : (
             <ul className="text-sm divide-y divide-hairline border-t border-hairline">
-              {dietary.map((a) => (
-                <li key={a.id} className="py-2.5">
-                  <span className="font-medium">{a.nickname || a.name}</span>
-                  <span className="text-slate2"> — {a.dietary}</span>
+              {dietary.map((g) => (
+                <li key={g.id} className="py-2.5">
+                  <span className="font-medium">{g.name}</span>
+                  <span className="text-muted"> — {g.dietary}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        <section>
+          <p className="marker mb-3">Loose ends</p>
+          <dl className="text-sm divide-y divide-hairline border-t border-hairline">
+            <div className="flex justify-between py-2.5">
+              <dt>Postal addresses collected</dt>
+              <dd className="mono">
+                {addresses.length}/{guests.length}
+              </dd>
+            </div>
+            <div className="flex justify-between py-2.5">
+              <dt>No email or phone</dt>
+              <dd className="mono">{noContact.length}</dd>
+            </div>
+            <div className="flex justify-between py-2.5">
+              <dt>Song requests</dt>
+              <dd className="mono">{songs.length}</dd>
+            </div>
+            {WEDDING.travel.flyIn && (
+              <>
+                <div className="flex justify-between py-2.5">
+                  <dt>Flights booked</dt>
+                  <dd className="mono">
+                    {counts.booked}/{counts.flying}
+                  </dd>
+                </div>
+                <div className="flex justify-between py-2.5">
+                  <dt>Want a car from the airport</dt>
+                  <dd className="mono">{coming.filter((g) => g.needs_transfer).length}</dd>
+                </div>
+              </>
+            )}
+          </dl>
+        </section>
       </div>
+
+      {songs.length > 0 && (
+        <section className="mt-12">
+          <p className="marker mb-3">The playlist so far</p>
+          <ul className="text-sm divide-y divide-hairline border-t border-hairline">
+            {songs.map((g) => (
+              <li key={g.id} className="flex justify-between gap-6 py-2.5">
+                <span>{g.song_request}</span>
+                <span className="text-muted shrink-0">{g.name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </Page>
   )
 }

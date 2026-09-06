@@ -15,7 +15,7 @@ export function Page({
     <div className="max-w-page mx-auto px-6 py-12 md:py-16">
       <p className="marker mb-3">{marker}</p>
       <h1 className="display text-4xl md:text-5xl mb-3">{title}</h1>
-      {lede && <p className="text-slate2 max-w-2xl mb-10">{lede}</p>}
+      {lede && <p className="text-muted max-w-2xl mb-10">{lede}</p>}
       {!lede && <div className="mb-10" />}
       {children}
     </div>
@@ -27,7 +27,7 @@ export function Stat({ label, value, sub }: { label: string; value: ReactNode; s
     <div className="card p-4">
       <p className="label mb-1">{label}</p>
       <p className="mono text-2xl leading-none">{value}</p>
-      {sub && <p className="text-xs text-slate2 mt-1.5">{sub}</p>}
+      {sub && <p className="text-xs text-muted mt-1.5">{sub}</p>}
     </div>
   )
 }
@@ -44,14 +44,24 @@ export function Notice({
   tone?: 'quiet' | 'warn'
 }) {
   return (
-    <div
-      className={
-        'card p-6 border-l-2 ' + (tone === 'warn' ? 'border-l-rust' : 'border-l-ochre')
-      }
-    >
+    <div className={'card p-6 border-l-2 ' + (tone === 'warn' ? 'border-l-rose' : 'border-l-olive')}>
       <p className="font-semibold mb-1.5">{title}</p>
-      {children && <div className="text-sm text-slate2 space-y-2">{children}</div>}
+      {children && <div className="text-sm text-muted space-y-2">{children}</div>}
     </div>
+  )
+}
+
+/**
+ * Stands in for a detail nobody has decided yet. Guests see a plain, honest
+ * "not settled" rather than a lorem-ipsum venue name; whoever is editing the
+ * site sees exactly which key in config.ts to fill in.
+ */
+export function Todo({ what, path }: { what: string; path?: string }) {
+  return (
+    <span className="text-muted italic">
+      {what}
+      {path && <span className="mono not-italic text-[0.7rem] ml-1.5 opacity-60">{path}</span>}
+    </span>
   )
 }
 
@@ -71,5 +81,26 @@ export function Table({ head, children }: { head: string[]; children: ReactNode 
         <tbody>{children}</tbody>
       </table>
     </div>
+  )
+}
+
+export function Pill({
+  children,
+  tone = 'quiet',
+}: {
+  children: ReactNode
+  tone?: 'solid' | 'quiet' | 'warn'
+}) {
+  const styles = {
+    solid: 'bg-ink text-paper',
+    quiet: 'border border-hairline text-muted',
+    warn: 'border border-rose text-rose',
+  }[tone]
+  return (
+    <span
+      className={`mono text-[0.65rem] uppercase tracking-widest px-2 py-1 shrink-0 ${styles}`}
+    >
+      {children}
+    </span>
   )
 }
