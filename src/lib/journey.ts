@@ -72,8 +72,8 @@ export function distanceKm(a: Airport, b: Airport) {
 // amount of distance accounts for.
 const airborneHours = (km: number) => km / 800 + 0.5
 
-// Beyond this, assume a connection unless the origin is on the known-nonstop
-// list. Short of it, direct service is the common case.
+// Used only when the config gives no explicit nonstop list. Beyond this,
+// assume a connection; short of it, direct service is the common case.
 const NONSTOP_RANGE_KM = 4000
 const CONNECTION_HOURS = 2
 // A change of airline or terminal, and often a bag recheck, at the gateway.
@@ -104,8 +104,13 @@ export function journeyFor(originCode: string): Journey | null {
   // whole flight.
   const mainTarget = gateway ?? arrival
   const mainKm = distanceKm(origin, mainTarget)
-  const nonstop =
-    WEDDING.travel.nonstopFrom.includes(origin.iata) || mainKm <= NONSTOP_RANGE_KM
+  // When the couple have listed the nonstop routes, that list is the whole
+  // truth — a small regional airport an hour away is not served nonstop just
+  // because it is close, and the distance heuristic would happily claim it is.
+  // Only fall back to distance when nobody has said.
+  const nonstop = WEDDING.travel.nonstopFrom.length
+    ? WEDDING.travel.nonstopFrom.includes(origin.iata)
+    : mainKm <= NONSTOP_RANGE_KM
   const mainAir = airborneHours(mainKm)
 
   const hopKm = gateway ? distanceKm(gateway, arrival) : 0

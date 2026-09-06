@@ -30,6 +30,9 @@ export default async function Home() {
   const names = real(WEDDING.couple.joined)
   const venue = real(WEDDING.venue.name)
   const town = real(WEDDING.venue.town)
+  // The eyebrow above already carries the full "town, region, country"; the
+  // sentence wants just the town, so take everything before the first comma.
+  const shortTown = town?.split(',')[0].trim()
   const rsvpBy = real(WEDDING.date.rsvpBy)
 
   return (
@@ -52,7 +55,7 @@ export default async function Home() {
             <>
               We are getting married on{' '}
               <span className="text-ink">{real(WEDDING.date.label) ?? formatDate(date!)}</span>
-              {venue && (
+              {venue && WEDDING.venue.confirmed && (
                 <>
                   {' '}at <span className="text-ink">{venue}</span>
                 </>
@@ -60,9 +63,18 @@ export default async function Home() {
               . We would love you there.
             </>
           ) : (
+            // Unconfirmed: name the window, never the working day. Whitespace
+            // is explicit here because JSX would otherwise leave a space
+            // floating before the comma.
             <>
-              We are getting married. The date and the place are nearly settled — this page is
-              where everything will land, so keep the link.
+              {'We are getting married'}
+              {town ? <> in <span className="text-ink">{shortTown}</span></> : null}
+              {real(WEDDING.date.windowLabel) ? (
+                <>
+                  , in <span className="text-ink">{WEDDING.date.windowLabel}</span>
+                </>
+              ) : null}
+              {'. The exact day is not fixed yet — this page is where everything lands, so keep the link.'}
             </>
           )}
         </p>
@@ -130,10 +142,13 @@ export default async function Home() {
 
       <section className="mt-16 md:mt-24 grid gap-10 md:grid-cols-2">
         <div>
-          <p className="marker mb-4">Where</p>
+          <p className="marker mb-4">{WEDDING.venue.confirmed ? 'Where' : 'Where we are looking'}</p>
           <h2 className="display text-3xl mb-3">
             {venue ?? <Todo what="Venue not chosen yet" path="venue.name" />}
           </h2>
+          {venue && !WEDDING.venue.confirmed && (
+            <p className="text-sm text-rose mb-3">Not booked yet — this could still change.</p>
+          )}
           <p className="text-muted mb-5">
             {real(WEDDING.venue.note) ??
               'Once the venue is booked, the description goes in config.ts and appears here.'}

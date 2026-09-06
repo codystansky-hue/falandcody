@@ -26,6 +26,21 @@ export default function TravelPage() {
       title="Travel"
       lede="One input — your home airport — and you get the journey, what it costs today, and a search with the dates already filled in."
     >
+      {/* The flight search is only useful if it has dates, so it runs off the
+          provisional date — which makes saying so loudly non-optional. */}
+      {stay && !WEDDING.date.confirmed && (
+        <div className="mb-8">
+          <Notice title="These dates are provisional" tone="warn">
+            <p>
+              The day is not fixed yet, so everything below is priced against a working date inside
+              the window we are choosing from. Use it to see what the journey looks like and roughly
+              what a fare costs — <strong className="text-ink">do not book anything
+              non-refundable</strong> until we confirm.
+            </p>
+          </Notice>
+        </div>
+      )}
+
       {!stay ? (
         <Notice title="Dates are not fixed yet" tone="warn">
           <p>
@@ -59,6 +74,28 @@ export default function TravelPage() {
             <TravelPlanner depart={stay.depart} ret={stay.return} />
           </section>
         </>
+      )}
+
+      {WEDDING.travel.alsoConsider.length > 0 && (
+        <section className="mt-14">
+          <p className="marker mb-4">Also worth pricing</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {WEDDING.travel.alsoConsider.map((alt) => (
+              <div key={alt.iata} className="card p-5">
+                <p className="display text-xl mb-1">
+                  <span className="mono text-base mr-2">{alt.iata}</span>
+                  {alt.city}
+                </p>
+                <p className="text-sm text-muted">{alt.note}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted mt-3">
+            The journey model above assumes you land at{' '}
+            {real(WEDDING.travel.arrival.iata) ?? 'the main airport'}. For these, add the extra
+            driving yourself.
+          </p>
+        </section>
       )}
 
       {(real(WEDDING.travel.transferNote) || WEDDING.travel.transferHours > 0) && (

@@ -209,6 +209,10 @@ async function callTool(name: string, args: Json) {
         rsvp_by: say(WEDDING.date.rsvpBy),
         venue: {
           name: say(WEDDING.venue.name),
+          // A venue that is only a shortlist must not be reported as booked —
+          // a model that says "the wedding is at X" is worse than one that
+          // says nothing.
+          confirmed: WEDDING.venue.confirmed,
           town: say(WEDDING.venue.town),
           address: say(WEDDING.venue.address),
           url: say(WEDDING.venue.url),
@@ -223,7 +227,9 @@ async function callTool(name: string, args: Json) {
               from_airport: WEDDING.travel.transferHours
                 ? `${WEDDING.travel.transferKm} km, about ${WEDDING.travel.transferHours} h`
                 : null,
+              also_consider: WEDDING.travel.alsoConsider,
               suggested_dates: stay,
+              dates_are_provisional: !WEDDING.date.confirmed,
             }
           : 'Everybody drives — there is no flying involved.',
         replies: counts,
@@ -328,6 +334,10 @@ async function callTool(name: string, args: Json) {
         return: stay.return,
         nights: stay.nights,
         why_these_dates: 'In the day before the first event, out the day after the last.',
+        provisional: !WEDDING.date.confirmed
+          ? 'The wedding date is NOT confirmed. These dates come from a working date inside the window being considered. Tell the user to look but not to book anything non-refundable.'
+          : null,
+        also_consider: WEDDING.travel.alsoConsider,
         journey: j
           ? {
               from: `${j.origin.iata} — ${j.origin.name}, ${j.origin.city} (${j.origin.country})`,
