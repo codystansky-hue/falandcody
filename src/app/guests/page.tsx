@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Notice, Page, Pill } from '@/components/ui'
-import { headcount, listGuests, tally, type Guest } from '@/lib/guests'
+import { hasReplied, headcount, listGuests, tally, type Guest } from '@/lib/guests'
 import { SIDES, WEDDING, real } from '@/lib/config'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +51,7 @@ function Card({ guest }: { guest: Guest }) {
 }
 
 export default async function GuestsPage() {
-  const guests = await listGuests()
+  const guests = (await listGuests()).filter(hasReplied)
   const counts = tally(guests)
   const coming = guests.filter((g) => g.status !== 'no')
   const cannot = guests.filter((g) => g.status === 'no')

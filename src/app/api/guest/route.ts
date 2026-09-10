@@ -18,6 +18,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Send JSON.' }, { status: 400 })
   }
   const body = payload as Record<string, unknown>
+  // Organiser-only. Guests must not write it, and omitting it must not wipe it.
+  delete body.notes
 
   // An explicit token in the body wins, so a shared edit link works in a
   // browser that has never seen this form before. An explicitly EMPTY token
