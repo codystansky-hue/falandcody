@@ -365,9 +365,12 @@ export const AIRPORTS = {
   gateway: WEDDING.travel.gateway,
 } as const
 
-/** How a guest is replying. */
+/** How a guest is replying. Organiser-seeded rows use `invited` until they do. */
 export const RSVP_STATUS = ['yes', 'maybe', 'no'] as const
 export type RsvpStatus = (typeof RSVP_STATUS)[number]
+
+export const GUEST_STATUS = ['yes', 'maybe', 'no', 'invited'] as const
+export type GuestStatus = (typeof GUEST_STATUS)[number]
 
 /** Which side of the room, for seating and for the guest-list filter. */
 export const SIDES = [

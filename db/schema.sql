@@ -20,7 +20,7 @@ create table if not exists guests (
   -- one | two | both. Which of you invited them; drives seating and filters.
   side              text        not null default 'both',
 
-  -- yes | maybe | no, for the wedding as a whole.
+  -- yes | maybe | no | invited. invited is organiser-seeded, not yet a reply.
   status            text        not null default 'yes',
   -- Event keys from WEDDING.events in src/lib/config.ts, e.g. ["ceremony"].
   attending_events  jsonb       not null default '[]'::jsonb,

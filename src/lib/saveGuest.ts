@@ -1,6 +1,6 @@
 import { db, isDbReady } from './db'
 import { getByToken } from './guests'
-import { EVENT_KEYS, MAX_PLUS_ONES, RSVP_STATUS, SIDE_KEYS, STAY_KEYS, WEDDING } from './config'
+import { EVENT_KEYS, GUEST_STATUS, MAX_PLUS_ONES, SIDE_KEYS, STAY_KEYS, WEDDING } from './config'
 
 // One upsert, shared by the browser form (POST /api/guest) and the MCP server
 // (`rsvp`). Two doors onto the same room, so validation and timezone handling
@@ -60,7 +60,7 @@ export async function saveGuest(body: Record<string, unknown>): Promise<SaveResu
   const name = str(body.name, 120)
   if (!name) throw new Error('Name is required.')
 
-  const status = oneOf(body.status, RSVP_STATUS, 'yes')
+  const status = oneOf(body.status, GUEST_STATUS, 'yes')
 
   // Someone who cannot come is not attending events, bringing anyone, or
   // needing a car. Clearing it here rather than trusting the client keeps the
@@ -72,6 +72,10 @@ export async function saveGuest(body: Record<string, unknown>): Promise<SaveResu
         (e): e is string => typeof e === 'string' && EVENT_KEYS.includes(e),
       )
     : []
+
+  const sql = db()
+  const token = str(body.edit_token, 64)
+  const existing = token ? await getByToken(token) : null
 
   const f = {
     name,
@@ -102,12 +106,9 @@ export async function saveGuest(body: Record<string, unknown>): Promise<SaveResu
     staying_with: str(body.staying_with, 200),
     passport_expiry: dateOnly(body.passport_expiry),
     emergency_contact: str(body.emergency_contact, 200),
-    notes: str(body.notes, 1000),
+    // Organiser-only. A later RSVP that omits notes must not wipe what we wrote.
+    notes: body.notes === undefined && existing ? existing.notes : str(body.notes, 1000),
   }
-
-  const sql = db()
-  const token = str(body.edit_token, 64)
-  const existing = token ? await getByToken(token) : null
 
   if (existing) {
     const rows = (await sql`

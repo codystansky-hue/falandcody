@@ -22,6 +22,7 @@ export default async function RsvpPage({
   // opened the form before.
   const token = params.token ?? store.get(EDIT_COOKIE)?.value ?? null
   const guest = token ? await getByToken(token) : null
+  const replied = Boolean(guest && guest.status !== 'invited')
 
   if (!isDbReady()) {
     return (
@@ -41,10 +42,10 @@ export default async function RsvpPage({
 
   return (
     <Page
-      marker={guest ? `Your reply · ${guest.name}` : 'RSVP'}
-      title={guest ? 'Your reply' : 'Will you come?'}
+      marker={replied && guest ? `Your reply · ${guest.name}` : guest ? `RSVP · ${guest.name}` : 'RSVP'}
+      title={replied ? 'Your reply' : 'Will you come?'}
       lede={
-        guest
+        replied
           ? 'Change anything and save. This is your reply and nobody else can overwrite it.'
           : `One pass, and only your name is required.${rsvpBy ? ` We need answers by ${rsvpBy}, but a rough yes now beats a precise one later.` : ''}`
       }

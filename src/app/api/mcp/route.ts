@@ -13,7 +13,7 @@ import {
   real,
   weddingDate,
 } from '@/lib/config'
-import { getByToken, groupTransfers, headcount, headcountFor, listGuests, seats, tally } from '@/lib/guests'
+import { getByToken, groupTransfers, hasReplied, headcount, headcountFor, listGuests, seats, tally } from '@/lib/guests'
 import { saveGuest } from '@/lib/saveGuest'
 import { routeOptions } from '@/lib/flightSearch'
 import { hoursLabel, journeyFor } from '@/lib/journey'
@@ -264,7 +264,7 @@ async function callTool(name: string, args: Json) {
     }
 
     case 'guest_list': {
-      const guests = await listGuests()
+      const guests = (await listGuests()).filter(hasReplied)
       const counts = tally(guests)
       return text({
         counts,

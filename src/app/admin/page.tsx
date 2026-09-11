@@ -1,6 +1,8 @@
 import { Notice, Page, Stat } from '@/components/ui'
-import { headcountFor, listGuests, passportRisk, tally } from '@/lib/guests'
-import { STAY_OPTIONS, WEDDING, outstanding } from '@/lib/config'
+import AddGuestForm, { CopyRsvpLink } from '@/components/AddGuestForm'
+import { headcountFor, listGuests, mightAttend, passportRisk, tally } from '@/lib/guests'
+import { SIDES, STAY_OPTIONS, WEDDING, outstanding } from '@/lib/config'
+import { isDbReady } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +11,10 @@ export const metadata = { title: 'Organiser' }
 export default async function AdminPage() {
   const guests = await listGuests()
   const counts = tally(guests)
-  const coming = guests.filter((g) => g.status !== 'no')
+  const coming = guests.filter(mightAttend)
+  const invited = guests.filter((g) => g.status === 'invited')
+  const dbReady = isDbReady()
+  const sideLabel = (key: string) => SIDES.find((s) => s.key === key)?.label ?? key
 
   const dietary = coming.filter((g) => g.dietary)
   const songs = guests.filter((g) => g.song_request)
@@ -52,6 +57,46 @@ export default async function AdminPage() {
           Addresses only
         </a>
       </div>
+
+      <section className="mb-12">
+        <p className="marker mb-3">Add a guest</p>
+        <p className="text-sm text-muted mb-5 max-w-2xl">
+          Seed the list yourselves — name is enough. They stay off Who’s coming until they RSVP
+          with the link you copy after saving. Plus-ones and children wait for that reply.
+        </p>
+        {dbReady ? (
+          <AddGuestForm />
+        ) : (
+          <Notice title="The form needs somewhere to put guests" tone="warn">
+            <p>
+              Add a Neon database and set <span className="mono">DATABASE_URL</span>, then run{' '}
+              <span className="mono">npm run migrate</span>.
+            </p>
+          </Notice>
+        )}
+      </section>
+
+      {invited.length > 0 && (
+        <section className="mb-12">
+          <p className="marker mb-3">
+            {invited.length} {invited.length === 1 ? 'guest' : 'guests'} invited, not yet replied
+          </p>
+          <ul className="card divide-y divide-hairline">
+            {invited.map((g) => (
+              <li key={g.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <p className="font-medium">{g.name}</p>
+                  <p className="text-sm text-muted">
+                    {[sideLabel(g.side), g.email, g.phone].filter(Boolean).join(' · ')}
+                  </p>
+                  {g.notes && <p className="text-sm text-muted mt-1">{g.notes}</p>}
+                </div>
+                <CopyRsvpLink token={g.edit_token} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* The setup checklist. Every string in config.ts still marked TODO,
           listed by its exact path so it can be found in seconds. */}
@@ -153,6 +198,10 @@ export default async function AdminPage() {
               <dd className="mono">
                 {addresses.length}/{guests.length}
               </dd>
+            </div>
+            <div className="flex justify-between py-2.5">
+              <dt>Invited, not yet replied</dt>
+              <dd className="mono">{counts.invited}</dd>
             </div>
             <div className="flex justify-between py-2.5">
               <dt>No email or phone</dt>

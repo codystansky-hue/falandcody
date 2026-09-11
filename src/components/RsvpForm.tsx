@@ -82,7 +82,7 @@ export default function RsvpForm({ guest }: { guest: Guest | null }) {
 
   const [draft, setDraft] = useState<Draft>({
     name: guest?.name ?? '',
-    status: guest?.status ?? 'yes',
+    status: guest?.status === 'maybe' || guest?.status === 'no' ? guest.status : 'yes',
     side: guest?.side ?? 'both',
     email: guest?.email ?? '',
     phone: guest?.phone ?? '',
@@ -578,7 +578,7 @@ export default function RsvpForm({ guest }: { guest: Guest | null }) {
 
       <div className="border-t border-hairline pt-6 flex flex-wrap items-center gap-4">
         <button type="submit" className="btn" disabled={saving}>
-          {saving ? 'Saving…' : guest ? 'Update my reply' : 'Send it'}
+          {saving ? 'Saving…' : guest && guest.status !== 'invited' ? 'Update my reply' : 'Send it'}
         </button>
         {saved && <p className="text-sm text-olive">Saved. Change it whenever you like.</p>}
         {error && (
