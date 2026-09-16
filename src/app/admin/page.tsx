@@ -1,7 +1,7 @@
 import { Notice, Page, Stat } from '@/components/ui'
-import AddGuestForm, { CopyRsvpLink } from '@/components/AddGuestForm'
+import AddGuestForm, { CopyRsvpLink, EditPlusOne } from '@/components/AddGuestForm'
 import { headcountFor, listGuests, mightAttend, passportRisk, tally } from '@/lib/guests'
-import { SIDES, STAY_OPTIONS, WEDDING, outstanding } from '@/lib/config'
+import { MAX_PLUS_ONES, SIDES, STAY_OPTIONS, WEDDING, outstanding } from '@/lib/config'
 import { isDbReady } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -62,7 +62,8 @@ export default async function AdminPage() {
         <p className="marker mb-3">Add a guest</p>
         <p className="text-sm text-muted mb-5 max-w-2xl">
           Seed the list yourselves — name is enough. They stay off Who’s coming until they RSVP
-          with the link you copy after saving. Plus-ones and children wait for that reply.
+          with the link you copy after saving. Name a plus-one on this invitation if you already
+          know who they are bringing; children wait for that reply.
         </p>
         {dbReady ? (
           <AddGuestForm />
@@ -85,13 +86,27 @@ export default async function AdminPage() {
             {invited.map((g) => (
               <li key={g.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
                 <div className="min-w-0">
-                  <p className="font-medium">{g.name}</p>
+                  <p className="font-medium">
+                    {g.name}
+                    {g.plus_one_name && (
+                      <span className="font-normal text-muted"> with {g.plus_one_name}</span>
+                    )}
+                  </p>
                   <p className="text-sm text-muted">
                     {[sideLabel(g.side), g.email, g.phone].filter(Boolean).join(' · ')}
                   </p>
                   {g.notes && <p className="text-sm text-muted mt-1">{g.notes}</p>}
                 </div>
-                <CopyRsvpLink token={g.edit_token} />
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {MAX_PLUS_ONES > 0 && (
+                    <EditPlusOne
+                      guestId={g.id}
+                      token={g.edit_token}
+                      plusOneName={g.plus_one_name}
+                    />
+                  )}
+                  <CopyRsvpLink token={g.edit_token} />
+                </div>
               </li>
             ))}
           </ul>
