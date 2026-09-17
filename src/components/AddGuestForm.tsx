@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { SIDES } from '@/lib/config'
+import { MAX_PLUS_ONES, SIDES } from '@/lib/config'
 
 const empty = {
   name: '',
@@ -11,6 +11,7 @@ const empty = {
   side: 'both',
   notes: '',
   postal_address: '',
+  plus_one_name: '',
 }
 
 function Field({
@@ -55,6 +56,101 @@ export function CopyRsvpLink({ token }: { token: string }) {
   )
 }
 
+export function EditPlusOne({
+  guestId,
+  token,
+  plusOneName,
+}: {
+  guestId: number
+  token: string
+  plusOneName: string | null
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState(plusOneName ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    const name = value.trim()
+    try {
+      const res = await fetch('/api/admin/guest', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          edit_token: token,
+          plus_one: Boolean(name),
+          plus_one_name: name,
+        }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? `Save failed (${res.status})`)
+      setOpen(false)
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setValue(plusOneName ?? '')
+          setError(null)
+          setOpen(true)
+        }}
+        className="btn btn-quiet py-1.5 px-3 text-xs shrink-0"
+      >
+        {plusOneName ? 'Edit plus-one' : 'Name plus-one'}
+      </button>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+      className="flex flex-wrap items-center gap-2"
+    >
+      <label className="sr-only" htmlFor={`edit-plus-one-${guestId}`}>
+        Plus-one name
+      </label>
+      <input
+        id={`edit-plus-one-${guestId}`}
+        className="field py-1.5 text-xs w-44"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Plus-one name"
+        autoFocus
+      />
+      <button type="submit" className="btn py-1.5 px-3 text-xs" disabled={saving}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-quiet py-1.5 px-3 text-xs"
+        disabled={saving}
+        onClick={() => setOpen(false)}
+      >
+        Cancel
+      </button>
+      {error && (
+        <p className="text-sm text-rose" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  )
+}
+
 export default function AddGuestForm() {
   const router = useRouter()
   const nameRef = useRef<HTMLInputElement>(null)
@@ -72,10 +168,22 @@ export default function AddGuestForm() {
     setSaving(true)
     setError(null)
     try {
+      const plusOneName = draft.plus_one_name.trim()
       const res = await fetch('/api/admin/guest', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(
+          plusOneName
+            ? { ...draft, plus_one: true, plus_one_name: plusOneName }
+            : {
+                name: draft.name,
+                email: draft.email,
+                phone: draft.phone,
+                postal_address: draft.postal_address,
+                side: draft.side,
+                notes: draft.notes,
+              },
+        ),
       })
       const json = (await res.json().catch(() => ({}))) as {
         error?: string
@@ -177,6 +285,19 @@ export default function AddGuestForm() {
             onChange={(e) => set('notes', e.target.value)}
           />
         </Field>
+
+        {MAX_PLUS_ONES > 0 && (
+          <Field name="add-guest-plus-one" label="Plus-one name" span>
+            <input
+              id="add-guest-plus-one"
+              className="field"
+              autoComplete="off"
+              placeholder="Optional — stays on this invitation"
+              value={draft.plus_one_name}
+              onChange={(e) => set('plus_one_name', e.target.value)}
+            />
+          </Field>
+        )}
 
         <div className="sm:col-span-2 flex flex-wrap items-center gap-4 pt-1">
           <button type="submit" className="btn" disabled={saving}>
